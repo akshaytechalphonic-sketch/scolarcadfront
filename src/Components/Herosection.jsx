@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { CgSmileSad } from "react-icons/cg";
 import { API_BASE_URL, APIENDPOINTS } from "../../apiconfig";
-import { getCourseImageUrl } from "@/utils/imageHelper";
+import { getCourseImageUrl, getLiveDocumentUrl, DEFAULT_COURSE_FALLBACK } from "@/utils/imageHelper";
 import Loader from "./loader";
 import { useCounter } from "@/utils/useCounter";
 import { HiMiniArrowLongRight } from "react-icons/hi2";
@@ -820,7 +820,12 @@ export default function LandingPage() {
                             src={getCourseImageUrl(course?.header_image)}
                             alt={course?.course_title}
                             onError={(e) => {
-                              e.currentTarget.src = "/assets/landingpage/aboutus_bg.jpg";
+                              if (!e.currentTarget.dataset.retried && course?.header_image) {
+                                e.currentTarget.dataset.retried = "true";
+                                e.currentTarget.src = getLiveDocumentUrl(course.header_image);
+                              } else {
+                                e.currentTarget.src = DEFAULT_COURSE_FALLBACK;
+                              }
                             }}
                             className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-500"
                           />

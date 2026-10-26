@@ -141,9 +141,9 @@ import { LuDownload, LuTvMinimal } from "react-icons/lu";
 import { BsCheck2All, BsCheck2Circle } from "react-icons/bs";
 import Contactus from "@/Components/contact";
 import { CgSmileSad } from "react-icons/cg";
-import { getCourseImageUrl } from "@/utils/imageHelper";
+import { getCourseImageUrl, DEFAULT_COURSE_FALLBACK } from "@/utils/imageHelper";
 
-const normalizeImageUrl = (path, fallback = "/assets/landingpage/aboutus_bg.jpg") => {
+const normalizeImageUrl = (path, fallback = DEFAULT_COURSE_FALLBACK) => {
   return getCourseImageUrl(path, fallback);
 };
 
@@ -660,6 +660,28 @@ function DynamicPage({
             setError(`No ${matchedSupportPage} data found.`);
             setCourseData(null);
           } else {
+            try {
+              const dynRes = await fetch(`${API_BASE_URL}${APIENDPOINTS.DYNAMIC_PAGE}`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                  course_id: url_title,
+                  country_id: cleanCountry || "IN",
+                  state_id: cleanState || null,
+                }),
+              });
+              if (dynRes.ok) {
+                const dynJson = await dynRes.json();
+                if (dynJson?.data) {
+                  Object.assign(data.data, dynJson.data);
+                }
+              }
+            } catch (e) {}
+
             setCourseData(data?.data);
             setError(null);
           }
@@ -2540,6 +2562,31 @@ function DynamicPage({
       parseRoadmapPoint(courseData.certificationPath.pointer_seven)
     )
   );
+
+  const parseLearningObjective = (val) => {
+    try {
+      const obj = typeof val === "string" ? JSON.parse(val) : val;
+      const heading = obj?.heading?.trim();
+      if (!heading || heading === "NA" || heading === "Na" || heading.toLowerCase() === "no details available") {
+        return null;
+      }
+      return {
+        heading: heading,
+        description: obj?.description && obj.description !== "NA" && obj.description !== "Na" ? obj.description : ""
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const learningObjectivesList = [
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_one), num: "01", color: "#F87C56" },
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_two), num: "02", color: "#FECF65" },
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_three), num: "03", color: "#FF9A9A" },
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_four), num: "04", color: "#7FB77E" },
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_five), num: "05", color: "#A4B7F1" },
+    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_six), num: "06", color: "#F7A9F2" },
+  ].filter((item) => Boolean(item.data));
 
   //   const parseAndDecode = (data, fallback = "{}") => {
   //   try {
@@ -5929,20 +5976,20 @@ function DynamicPage({
                     </div>
                     <div className="flex md:justify-end justify-center ">
                       <div className="bg-gray-50 border-1 border-gray-200 rounded-lg  p-3 max-w-[70%]  flex justify-center item-center  w-full  ">
-                        {(courseData?.certificationImage?.image_path || courseData?.courseImage?.banner_image_path) && (
-                          <img
-                            src={normalizeImageUrl(
-                              courseData?.certificationImage?.image_path ||
-                              courseData?.courseImage?.banner_image_path,
-                              "/assets/images/new-dynamic-course/certificate.jpg"
-                            )}
-                            alt="Certificate"
-                            onError={(e) => {
-                              e.currentTarget.src = "/assets/images/new-dynamic-course/certificate.jpg";
-                            }}
-                            className="object-contain w-full h-auto rounded-md shadow-sm"
-                          />
-                        )}
+                        <img
+                          src={
+                            courseData?.certificationImage?.image_path
+                              ? normalizeImageUrl(courseData.certificationImage.image_path, "/assets/images/new-dynamic-course/certificate.jpg")
+                              : courseData?.courseImage?.banner_image_path
+                              ? normalizeImageUrl(courseData.courseImage.banner_image_path, "/assets/images/new-dynamic-course/certificate.jpg")
+                              : "/assets/images/new-dynamic-course/certificate.jpg"
+                          }
+                          alt="Certificate"
+                          onError={(e) => {
+                            e.currentTarget.src = "/assets/images/new-dynamic-course/certificate.jpg";
+                          }}
+                          className="object-contain w-full h-auto rounded-md shadow-sm"
+                        />
                       </div>
                     </div>
                   </div>
@@ -6075,246 +6122,39 @@ function DynamicPage({
                 </div>
               </section> */}
 
-                {/*Learning Benefits */}
-                <section className="py-5 max-sm:p-3  max-sm:pb-12 rounded-md">
-                  <div className="flex justify-center items-center flex-col ">
-                    {/* <div>
-                      <RiGraduationCapFill className="text-[#2E318D] text-4xl rotate-350 ml-[-15px] mb-[-5px] " />
-                      <h2 className="heading md:max-w-[80%] m-auto text-center ">
-                       Learning Objective - Skills & knowledge you will get from this course
+                {/*Learning Benefits - Dynamic from backend only */}
+                {learningObjectivesList && learningObjectivesList.length > 0 && (
+                  <section className="py-5 max-sm:p-3 max-sm:pb-12 rounded-md">
+                    <div className="flex justify-center items-center flex-col ">
+                      <h2 className="heading md:max-w-[70%] m-auto text-center">
+                        {courseData?.allHeadline?.old_learning_objectives ||
+                          "Learning Objective - Skills & knowledge you will get from this course"}
                       </h2>
-                    </div> */}
-                    <h2 className="heading md:max-w-[70%] m-auto text-center">
-                      {courseData?.allHeadline?.old_learning_objectives ||
-                        "Learning Objective - Skills & knowledge you will get from this course"}
-                    </h2>
-                  </div>
-                  <section className="mt-12">
-                    <div className="max-w-7xl mx-auto  grid  grid-cols-1 md:grid-cols-2  md:gap-[70px] gap-[50px]">
-                      <div className="relative">
-                        <div className="bg-[#F87C56] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          01
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg  p-2 md:w-[90%]   h-30 overflow-hidden border border-gray-200 ">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_one || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_one || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="bg-[#FECF65] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          02
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg  p-2 md:w-[90%] h-30 overflow-hidden border border-gray-200">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_two || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_two || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="bg-[#FF9A9A] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          03
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg  p-2 md:w-[90%] h-30 overflow-hidden border border-gray-200">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_three || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_three || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="bg-[#7FB77E] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          04
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg p-2 md:w-[90%]  h-30 overflow-hidden border border-gray-200">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_four || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_four || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="bg-[#A4B7F1] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          05
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg  p-2 md:w-[90%]  h-30 overflow-hidden border border-gray-200">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_five || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_five || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <div className="bg-[#F7A9F2] text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5">
-                          06
-                        </div>
-                        <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg  p-2 md:w-[90%]  h-30 overflow-hidden border border-gray-200">
-                          <h3 className="text-lg font-semibold mb-2">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_six || "{}",
-                                  )?.heading || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </h3>
-
-                          <p className="text-gray-500 text-sm leading-relaxed">
-                            {(() => {
-                              try {
-                                return (
-                                  JSON.parse(
-                                    courseData?.courseLearningObjectives
-                                      ?.record_six || "{}",
-                                  )?.description || "NA"
-                                );
-                              } catch {
-                                return "NA";
-                              }
-                            })()}
-                          </p>
-                        </div>
-                      </div>
                     </div>
+                    <section className="mt-12">
+                      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 md:gap-[70px] gap-[50px]">
+                        {learningObjectivesList.map((item, idx) => (
+                          <div key={idx} className="relative">
+                            <div
+                              className="text-white text-2xl font-bold w-full h-30 rounded-lg flex items-center pl-5"
+                              style={{ backgroundColor: item.color }}
+                            >
+                              {item.num}
+                            </div>
+                            <div className="absolute -top-[20px] left-0 right-0 ml-[70px] mx-auto bg-white rounded-lg p-2 md:w-[90%] h-30 overflow-hidden border border-gray-200">
+                              <h3 className="text-lg font-semibold mb-2">
+                                {item.data.heading}
+                              </h3>
+                              <p className="text-gray-500 text-sm leading-relaxed">
+                                {item.data.description}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </section>
-                </section>
+                )}
 
                 {/* Hub for Technology Section */}
                 <section className="py-5 max-sm:p-3">
@@ -7526,6 +7366,31 @@ export async function getServerSideProps({ req, params }) {
               if (!json.data.header_image && courseJson.data.header_image) {
                 json.data.header_image = courseJson.data.header_image;
               }
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Also enrich support page with dynamic page sections (Overview, Key Features, Why ScholarAcad, What You Learn)
+        try {
+          const dynRes = await fetch(`${API_BASE_URL}${APIENDPOINTS.DYNAMIC_PAGE}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              course_id: url_title,
+              country_id: active_country || "IN",
+              state_id: active_state || null,
+            }),
+          });
+          if (dynRes.ok) {
+            const dynJson = await dynRes.json();
+            if (dynJson?.data) {
+              Object.assign(json.data, dynJson.data);
             }
           }
         } catch (e) {

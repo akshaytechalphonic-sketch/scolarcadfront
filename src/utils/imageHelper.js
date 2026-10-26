@@ -63,7 +63,15 @@ export function getCourseImageUrl(imagePath, fallback = DEFAULT_COURSE_FALLBACK)
     return `${base}/${cleanPath}`;
   }
   // Backend uploaded file path
+  // If running on local development (127.0.0.1 / localhost) and loading uploaded documents,
+  // we can use local API or fallback to live media host where files are stored
   const base = (API_BASE_URL || "").replace(/\/+$/, "");
   return `${base}/master/secure-documents?path=${encodeURIComponent(cleanPath)}`;
+}
+
+export function getLiveDocumentUrl(imagePath) {
+  if (!imagePath || typeof imagePath !== "string") return DEFAULT_COURSE_FALLBACK;
+  const cleanPath = imagePath.trim().replace(/^\/+/, "");
+  return `https://api.demotechalphonic.tech/master/secure-documents?path=${encodeURIComponent(cleanPath)}`;
 }
 

@@ -511,6 +511,19 @@ export default function DedicatedQuizQuestionsPage({
     );
   }, [currentQuestion]);
 
+  // Dropdown selection check for current question
+  const isDropdownType = useMemo(() => {
+    if (!currentQuestion) return false;
+    const typeStr = (currentQuestion.type || "").toLowerCase();
+    return (
+      typeStr === "dropdown" ||
+      typeStr === "dropdown_selection" ||
+      typeStr === "dropdown_choice" ||
+      typeStr === "select" ||
+      typeStr.includes("dropdown")
+    );
+  }, [currentQuestion]);
+
   return (
     <>
       <DynamicSEO
@@ -658,7 +671,7 @@ export default function DedicatedQuizQuestionsPage({
         )}
 
         {/* Content Section - Expanded Width for Prominent Question Box */}
-        <section className="max-w-5xl lg:max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
           {/* Loading State */}
           {loading && (
             <div className="bg-white rounded-3xl p-16 shadow-sm border border-slate-200 flex flex-col items-center justify-center space-y-4 my-8">
@@ -811,9 +824,9 @@ export default function DedicatedQuizQuestionsPage({
 
           {/* ACTIVE QUESTIONS SCREEN (BIG QUESTION BOX & MODERN TOOLS) */}
           {!loading && !error && !isSubmitted && currentQuestion && (
-            <div className="space-y-6">
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
               {/* MAIN ENLARGED QUESTION CARD */}
-              <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/90 overflow-hidden transition-all duration-300">
+              <div className="flex-1 min-w-0 w-full bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/90 overflow-hidden transition-all duration-300">
                 {/* Question Card Top Bar (Question #, Type, Marks, Toolbar) */}
                 <div className="bg-slate-50/95 border-b border-slate-200/80 px-6 sm:px-10 py-4 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3 flex-wrap">
@@ -821,7 +834,13 @@ export default function DedicatedQuizQuestionsPage({
                       Question #{currentQuestion?.order_no || currentIndex + 1}
                     </span>
                     <span className="text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl uppercase tracking-wider">
-                      {currentQuestion?.type ? currentQuestion.type.replace(/_/g, " ") : "MULTIPLE CHOICE"}
+                      {isDropdownType
+                        ? "DROPDOWN SELECTION"
+                        : isMatchingType
+                        ? "MATCHING PAIRS"
+                        : currentQuestion?.type
+                        ? currentQuestion.type.replace(/_/g, " ")
+                        : "MULTIPLE CHOICE"}
                     </span>
                     <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-xl">
                       {currentQuestion?.marks || 1} Mark{currentQuestion?.marks > 1 ? "s" : ""}
@@ -973,21 +992,24 @@ export default function DedicatedQuizQuestionsPage({
                             const selectedMatch =
                               matchingAnswers[currentQuestion.id]?.[pairKey] || "";
 
+                            const parts = (option.option_text || "").split(/\s*(?:->|::|\|)\s*/);
+                            const itemConcept = parts[0] || option.option_text;
+
                             return (
                               <div
                                 key={option.id || optIdx}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-purple-100 shadow-2xs"
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-2xl border border-purple-100 shadow-2xs hover:border-purple-300 transition"
                               >
                                 <div className="flex items-center gap-3">
-                                  <span className="w-7 h-7 rounded-lg bg-[#882CFB] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                                  <span className="w-8 h-8 rounded-xl bg-[#882CFB] text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
                                     {option.option_label || String.fromCharCode(65 + optIdx)}
                                   </span>
                                   <span className="text-xs sm:text-sm font-bold text-slate-800">
-                                    {option.option_text}
+                                    {itemConcept}
                                   </span>
                                 </div>
 
-                                <div className="sm:w-60">
+                                <div className="sm:w-80">
                                   <select
                                     value={selectedMatch}
                                     onChange={(e) =>
@@ -997,17 +1019,21 @@ export default function DedicatedQuizQuestionsPage({
                                         e.target.value
                                       )
                                     }
-                                    className="w-full text-xs font-semibold p-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#882CFB]"
+                                    className="w-full text-xs font-semibold p-2.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#882CFB] shadow-2xs cursor-pointer"
                                   >
-                                    <option value="">-- Select Match --</option>
-                                    {currentQuestion.options.map((targetOpt, tIdx) => (
-                                      <option
-                                        key={targetOpt.id || tIdx}
-                                        value={targetOpt.id}
-                                      >
-                                        Pair with: {targetOpt.option_label}. {targetOpt.option_text?.substring(0, 35)}...
-                                      </option>
-                                    ))}
+                                    <option value="">-- Select Matching Concept --</option>
+                                    {currentQuestion.options.map((targetOpt, tIdx) => {
+                                      const tParts = (targetOpt.option_text || "").split(/\s*(?:->|::|\|)\s*/);
+                                      const targetDef = tParts.length > 1 ? tParts[1] : tParts[0];
+                                      return (
+                                        <option
+                                          key={targetOpt.id || tIdx}
+                                          value={targetOpt.id}
+                                        >
+                                          {tIdx + 1}. {targetDef}
+                                        </option>
+                                      );
+                                    })}
                                   </select>
                                 </div>
                               </div>
@@ -1017,11 +1043,84 @@ export default function DedicatedQuizQuestionsPage({
                     </div>
                   )}
 
+                  {/* DROPDOWN DATA SELECTION INTERACTIVE UI (for dropdown questions) */}
+                  {isDropdownType && (
+                    <div className="p-5 sm:p-7 rounded-3xl bg-gradient-to-br from-indigo-50/90 via-purple-50/50 to-white border-2 border-indigo-200 shadow-md space-y-4 animate-in fade-in duration-200">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-3">
+                        <div className="flex items-center gap-2.5 text-xs sm:text-sm font-black text-indigo-950 uppercase tracking-wider">
+                          <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-xs">
+                            <FaChevronDown />
+                          </span>
+                          <span>Dropdown Data & Solution Selection</span>
+                        </div>
+                        <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full border border-indigo-300">
+                          Select from Menu
+                        </span>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-700 font-medium">
+                        Choose your solution / option from the dropdown menu below:
+                      </p>
+
+                      <div className="space-y-3 pt-1">
+                        <div className="relative">
+                          <select
+                            id={`dropdown-select-${currentQuestion.id}`}
+                            value={selectedAnswers[currentQuestion.id] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) || e.target.value : undefined;
+                              if (val !== undefined) {
+                                handleSelectOption(currentQuestion.id, val);
+                              }
+                            }}
+                            className={`w-full text-xs sm:text-sm font-bold py-3.5 pl-4 pr-11 rounded-2xl border-2 transition-all cursor-pointer appearance-none bg-white shadow-xs focus:outline-none focus:ring-2 focus:ring-[#882CFB] ${
+                              selectedAnswers[currentQuestion.id]
+                                ? "border-indigo-500 text-indigo-950 ring-2 ring-indigo-200 bg-indigo-50/30"
+                                : "border-slate-300 text-slate-700 hover:border-indigo-400"
+                            }`}
+                          >
+                            <option value="">-- Click here to select the correct option from dropdown --</option>
+                            {Array.isArray(currentQuestion?.options) &&
+                              currentQuestion.options.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  Option {opt.option_label}: {opt.option_text}
+                                </option>
+                              ))}
+                          </select>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-600 text-sm">
+                            <FaChevronDown />
+                          </div>
+                        </div>
+
+                        {selectedAnswers[currentQuestion.id] && (() => {
+                          const selOpt = currentQuestion.options?.find(
+                            (o) => o.id === selectedAnswers[currentQuestion.id]
+                          );
+                          return (
+                            <div className="flex items-center gap-2.5 text-xs font-bold text-indigo-950 bg-white p-3.5 rounded-2xl border border-indigo-200 shadow-2xs">
+                              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0">
+                                {selOpt?.option_label || "✓"}
+                              </span>
+                              <span className="text-slate-500">Selected Solution:</span>
+                              <span className="text-slate-900 truncate font-semibold">
+                                {selOpt?.option_text}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
                   {/* STANDARD OPTIONS LIST WITH STRIKE-OFF FEATURE */}
                   <div className="space-y-3.5 pt-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-1">
-                      <span>Select the best answer from the options below:</span>
-                      <span className="text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5">
+                      <span className="text-sm sm:text-base font-bold text-slate-700">
+                        {isDropdownType
+                          ? "All Available Options (Click card or choose from dropdown above):"
+                          : "Select the best answer from the options below:"}
+                      </span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-500">
                         Tip: Use Strike-Off (S̶) to cross out incorrect options
                       </span>
                     </div>
@@ -1134,8 +1233,26 @@ export default function DedicatedQuizQuestionsPage({
                               </div>
                             </div>
 
-                            {/* Right Side: Strike-Off Toggle Button + Selection Icon */}
-                            <div className="flex items-center gap-2.5 shrink-0 pt-1">
+                            {/* Right Side: Select Button + Strike-Off Toggle + Selection Icon */}
+                            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 pt-1 flex-wrap justify-end">
+                              {/* Explicit Select Button */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectOption(currentQuestion.id, option.id);
+                                }}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                                  isSelected
+                                    ? "bg-[#882CFB] text-white ring-2 ring-purple-300 shadow-purple-200"
+                                    : "bg-purple-50 hover:bg-[#882CFB] text-[#882CFB] hover:text-white border border-purple-200"
+                                }`}
+                                title="Click to select this answer option"
+                              >
+                                <FaCheckCircle className="text-xs" />
+                                <span>{isSelected ? "Selected" : "Select"}</span>
+                              </button>
+
                               {/* Strike-Off Toggle Button */}
                               <button
                                 type="button"
@@ -1310,41 +1427,41 @@ export default function DedicatedQuizQuestionsPage({
                 </div>
               </div>
 
-              {/* QUESTION PALETTE / COLOR-CODED QUICK JUMP GRID */}
+              {/* QUESTION PALETTE / COLOR-CODED QUICK JUMP GRID (SIDEBAR) */}
               {totalQuestions > 1 && (
-                <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+                <div className="w-full lg:w-80 xl:w-[350px] shrink-0 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm lg:sticky lg:top-24">
+                  <div className="flex flex-col gap-3 mb-4 pb-3 border-b border-slate-100">
                     <span className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
                       <MdFormatListNumbered className="text-base text-[#882CFB]" />
                       <span>Question Navigation Palette ({totalQuestions} Total)</span>
                     </span>
 
                     {/* Color-Coded Palette Legend in English */}
-                    <div className="flex items-center gap-3 sm:gap-4 text-[11px] font-bold text-slate-500 flex-wrap">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-[#882CFB]"></span>
+                        <span className="w-3 h-3 rounded-full bg-[#882CFB] shrink-0"></span>
                         Current
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                        <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></span>
                         Correct ({scoreStats.correct})
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+                        <span className="w-3 h-3 rounded-full bg-rose-500 shrink-0"></span>
                         Incorrect ({scoreStats.incorrect})
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-amber-400"></span>
+                        <span className="w-3 h-3 rounded-full bg-amber-400 shrink-0"></span>
                         Flagged ({flaggedCount})
                       </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-slate-200"></span>
+                      <span className="flex items-center gap-1.5 col-span-2">
+                        <span className="w-3 h-3 rounded-full bg-slate-200 shrink-0"></span>
                         Remaining ({scoreStats.unanswered})
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2.5 max-h-56 overflow-y-auto p-1">
+                  <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-[calc(100vh-280px)] overflow-y-auto p-1">
                     {questions.map((q, idx) => {
                       const isCurrent = idx === currentIndex;
                       const selectedId = selectedAnswers[q.id];
@@ -1388,7 +1505,7 @@ export default function DedicatedQuizQuestionsPage({
                           key={q.id || idx}
                           type="button"
                           onClick={() => handleJumpToQuestion(idx)}
-                          className={`relative w-10 h-10 rounded-xl text-xs font-black flex items-center justify-center transition cursor-pointer ${btnStyle}`}
+                          className={`relative w-10 h-10 rounded-xl text-xs font-black flex items-center justify-center transition cursor-pointer mx-auto ${btnStyle}`}
                         >
                           {idx + 1}
                           {isFlagged && (
