@@ -242,6 +242,7 @@ export default function DedicatedQuizDetailPage({
         `Practice ${quiz?.title || "interactive quiz"} for ${courseDisplayName} at ScholarAcad.`,
       pageUrl: `/${courseSlug}/quizzes/${quizSlug}`,
       courseName: courseDisplayName,
+      courseData: data,
       breadcrumbs: [
         { name: "Home", url: "/" },
         { name: "Courses", url: "/all-courses" },
@@ -250,7 +251,7 @@ export default function DedicatedQuizDetailPage({
         { name: quiz?.title || "Quiz Details", url: `/${courseSlug}/quizzes/${quizSlug}` },
       ],
     });
-  }, [quiz, courseDisplayName, courseSlug, quizSlug]);
+  }, [quiz, courseDisplayName, courseSlug, quizSlug, data]);
 
   return (
     <>

@@ -216,13 +216,14 @@ export default function DedicatedQuizzesPage({
       pageDescription: `Standalone offline/online practice and exam simulator for ${courseDisplayName}. Practice mode, timed exam mode, instant scoring, and verified question bank.`,
       pageUrl: `/${targetCourseSlug}/quizzes`,
       courseName: courseDisplayName,
+      courseData: courseInfo || courseData,
       breadcrumbs: [
         { name: "Home", url: "/" },
         { name: courseDisplayName, url: `/${targetCourseSlug}` },
         { name: "Quizzes", url: `/${targetCourseSlug}/quizzes` },
       ],
     });
-  }, [courseDisplayName, targetCourseSlug]);
+  }, [courseDisplayName, targetCourseSlug, courseInfo, courseData]);
 
   if (loading) {
     return (

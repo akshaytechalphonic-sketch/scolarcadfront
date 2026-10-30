@@ -104,6 +104,7 @@ export default function App({ Component, pageProps }) {
     title = "ScholarAcad | Professional Certification Training in Agile, ITIL, PMP, COBIT & PRINCE2",
     description = "ScholarAcad offers globally recognized certification training in PMP, Agile, ITIL, COBIT, DevOps & IT Governance. Live online & corporate training worldwide.",
     keywords = "Certification Courses online ,Certification Training online , PMP Bootcamps ,Professional Bootcamps, Corporate Training, In-Demand Skills, Career-Boosting Certifications, Agile Management, Project Management,Cloud Computing, DevOps, Data Science, Cybersecurity, IT Service Management, Business Management, Quality Management, BI and Visualization (Business Intelligence), Professional Bootcamps and Certification Courses, Learn In-Demand Skills for Tomorrow's Jobs, Leap Ahead with Career-Boosting Certifications, High-Impact Skills for the Future of Work, Choose From 25+ In-Demand Domains, CSM Certification (Certified ScrumMaster), PMP Certification training, CSPO Certification, Leading SAFe 6.0 Certification, ITIL Foundation Certification, Microsoft Power BI, Lean Six Sigma Green Belt Certification, SAFe 6.0 Scrum Master Certification, Agile Master's Program, Project Management Courses, Cloud Computing Courses, DevOps Courses, Data Science Courses",
+    schemaData = null,
   } = pageProps;
   const cleanCanonicalUrl = getCleanCanonicalUrl(router.asPath);
 
@@ -111,8 +112,8 @@ export default function App({ Component, pageProps }) {
     <>
       <Toaster position="top-right" />
       <GoogleAnalytics />
-      <GoogleTagManager />
-      <WebsiteSchema />
+      {!schemaData && <GoogleTagManager />}
+      {!schemaData && <WebsiteSchema />}
       <Head>
         <title key="title">{title}</title>
         <meta key="description" name="description" content={description} />
@@ -125,6 +126,13 @@ export default function App({ Component, pageProps }) {
         <meta key="og:description" property="og:description" content={description} />
         <meta key="og:url" property="og:url" content={cleanCanonicalUrl} />
         <link key="canonical" rel="canonical" href={cleanCanonicalUrl} />
+        {schemaData && (
+          <script
+            key="structured-data"
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
+          />
+        )}
       </Head>
       <main className={nunito.className}>
         <AuthProvider>

@@ -151,9 +151,12 @@ export default function DedicatedNotesPage({
       title: seoTitle,
       description: seoDesc,
       pageUrl: canonicalPath,
+      courseName: courseTitle,
+      courseData,
+      imageUrl: courseImage,
       breadcrumbs: schemaBreadcrumbs
     });
-  }, [seoTitle, seoDesc, canonicalPath, schemaBreadcrumbs]);
+  }, [seoTitle, seoDesc, canonicalPath, courseTitle, courseData, courseImage, schemaBreadcrumbs]);
 
   if (loading && !courseData) {
     return (

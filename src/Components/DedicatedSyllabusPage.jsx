@@ -103,111 +103,165 @@ export default function DedicatedSyllabusPage({
 }) {
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
-  // Parse Eligibility Pointers
-  let certificatelist = [];
-  try {
-    const rawElig = courseData?.certificateEligibility?.eligibility_pointers || "[]";
-    certificatelist = typeof rawElig === "string" ? JSON.parse(rawElig) : rawElig;
-    if (!Array.isArray(certificatelist)) certificatelist = [];
-  } catch (e) {
-    certificatelist = [];
-  }
-
-  const hasEligibility = Boolean(
-    certificatelist.length > 0 ||
-    courseData?.courseDescription?.eligibility ||
-    courseData?.allHeadline?.eligibility
+  const targetCourseId = useMemo(
+    () =>
+      courseData?.course?.id ||
+      courseData?.course_id ||
+      courseData?.support_page?.course_id ||
+      courseData?.dynamicCourseHeading?.course_id ||
+      courseData?.allHeadline?.course_id ||
+      courseData?.courseOverview?.course_id ||
+      courseData?.whatYouWillLearn?.course_id ||
+      courseData?.courseHighlights?.course_id ||
+      courseData?.images?.course_id ||
+      null,
+    [courseData]
   );
 
-  // Parse Roadmap
+  const belongsToCourse = (record) => {
+    if (!record || typeof record !== "object") return false;
+    if (record.course_id !== undefined && record.course_id !== null) {
+      if (!targetCourseId) return false;
+      if (Number(record.course_id) !== Number(targetCourseId)) return false;
+    }
+    return true;
+  };
+
+  const isNonEmptyText = (val) => {
+    if (!val || typeof val !== "string") return false;
+    const trimmed = val.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    return !["na", "n/a", "no data", "no details available", "null", "undefined"].includes(lower);
+  };
+
+  const isNonEmptyHtml = (val) => {
+    if (!val || typeof val !== "string") return false;
+    const stripped = val.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
+    return isNonEmptyText(stripped);
+  };
+
+  // Parse Eligibility Pointers (only from this course's backend data)
+  let certificatelist = [];
+  if (belongsToCourse(courseData?.certificateEligibility)) {
+    try {
+      const rawElig = courseData?.certificateEligibility?.eligibility_pointers || "[]";
+      const parsed = typeof rawElig === "string" ? JSON.parse(rawElig) : rawElig;
+      if (Array.isArray(parsed)) {
+        certificatelist = parsed.filter((item) => isNonEmptyText(item));
+      }
+    } catch (e) {
+      certificatelist = [];
+    }
+  }
+
+  const eligibilityDescriptionHtml =
+    belongsToCourse(courseData?.courseDescription) &&
+    isNonEmptyHtml(courseData?.courseDescription?.eligibility)
+      ? courseData.courseDescription.eligibility
+      : "";
+
+  const hasEligibility = Boolean(
+    certificatelist.length > 0 || eligibilityDescriptionHtml
+  );
+
+  // Parse Roadmap (only from this course's backend data)
   const parseRoadmapPoint = (val) => {
     try {
       const obj = typeof val === "string" ? JSON.parse(val) : val;
       const heading = obj?.heading?.trim();
-      return heading && heading !== "NA" && heading !== "Na" && heading.toLowerCase() !== "no details available" ? obj : null;
+      return isNonEmptyText(heading) ? obj : null;
     } catch (e) {
       return null;
     }
   };
 
+  const validCertPath = belongsToCourse(courseData?.certificationPath)
+    ? courseData?.certificationPath
+    : null;
+
   const roadmapPoints = [
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_one),
+      data: parseRoadmapPoint(validCertPath?.pointer_one),
       bg: "#FFD9D9",
       badge: "W1",
       badgeColor: "#FFB3B3",
       icon: "/assets/landingpage/msp_three_weekicon/studying_exam.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_two),
+      data: parseRoadmapPoint(validCertPath?.pointer_two),
       bg: "#FFD9D9",
       badge: "W1",
       badgeColor: "#FFB3B3",
       icon: "/assets/landingpage/msp_three_weekicon/write.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_three),
+      data: parseRoadmapPoint(validCertPath?.pointer_three),
       bg: "#FDF2CD",
       badge: "W2",
       badgeColor: "#F9DF8D",
       icon: "/assets/landingpage/msp_three_weekicon/plan.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_four),
+      data: parseRoadmapPoint(validCertPath?.pointer_four),
       bg: "#FDF2CD",
       badge: "W2",
       badgeColor: "#F9DF8D",
       icon: "/assets/landingpage/msp_three_weekicon/practise_exam.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_five),
+      data: parseRoadmapPoint(validCertPath?.pointer_five),
       bg: "#E2F0CC",
       badge: "W3",
       badgeColor: "#9DC75C",
       icon: "/assets/landingpage/msp_three_weekicon/bulb.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_six),
+      data: parseRoadmapPoint(validCertPath?.pointer_six),
       bg: "#E2F0CC",
       badge: "W3",
       badgeColor: "#9DC75C",
       icon: "/assets/landingpage/msp_three_weekicon/test_exam.svg",
     },
     {
-      data: parseRoadmapPoint(courseData?.certificationPath?.pointer_seven),
+      data: parseRoadmapPoint(validCertPath?.pointer_seven),
       bg: "#E2F0CC",
       badge: "W3",
       badgeColor: "#9DC75C",
       icon: "/assets/landingpage/msp_three_weekicon/teacher.svg",
     },
-  ].filter((p) => p.data && p.data.heading);
+  ].filter((p) => p.data && isNonEmptyText(p.data.heading));
 
   const hasRoadmap = Boolean(roadmapPoints.length > 0);
 
-  // Parse Learning Objectives
+  // Parse Learning Objectives (only from this course's backend data)
   const parseLearningObjective = (val) => {
     try {
       const obj = typeof val === "string" ? JSON.parse(val) : val;
       const heading = obj?.heading?.trim();
-      if (!heading || heading === "NA" || heading === "Na" || heading.toLowerCase() === "no details available") {
+      if (!isNonEmptyText(heading)) {
         return null;
       }
       return {
         heading: heading,
-        description: obj?.description && obj.description !== "NA" && obj.description !== "Na" ? obj.description : ""
+        description: isNonEmptyText(obj?.description) ? obj.description : ""
       };
     } catch (e) {
       return null;
     }
   };
 
+  const validLearningObj = belongsToCourse(courseData?.courseLearningObjectives)
+    ? courseData?.courseLearningObjectives
+    : null;
+
   const learningObjectivesList = [
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_one), num: "01", color: "#F87C56" },
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_two), num: "02", color: "#FECF65" },
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_three), num: "03", color: "#FF9A9A" },
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_four), num: "04", color: "#7FB77E" },
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_five), num: "05", color: "#A4B7F1" },
-    { data: parseLearningObjective(courseData?.courseLearningObjectives?.record_six), num: "06", color: "#F7A9F2" },
+    { data: parseLearningObjective(validLearningObj?.record_one), num: "01", color: "#F87C56" },
+    { data: parseLearningObjective(validLearningObj?.record_two), num: "02", color: "#FECF65" },
+    { data: parseLearningObjective(validLearningObj?.record_three), num: "03", color: "#FF9A9A" },
+    { data: parseLearningObjective(validLearningObj?.record_four), num: "04", color: "#7FB77E" },
+    { data: parseLearningObjective(validLearningObj?.record_five), num: "05", color: "#A4B7F1" },
+    { data: parseLearningObjective(validLearningObj?.record_six), num: "06", color: "#F7A9F2" },
   ].filter((item) => Boolean(item.data));
 
   // Calendar State & Handlers
@@ -292,12 +346,23 @@ export default function DedicatedSyllabusPage({
     }
   };
 
-  const hasCertificate = Boolean(
-    courseData?.certificationText?.description ||
-    courseData?.certificationImage?.image_path ||
-    courseData?.courseImage?.banner_image_path ||
-    courseData?.allHeadline?.certifications
-  );
+  const certificateDescriptionHtml = useMemo(() => {
+    if (!belongsToCourse(courseData?.certificationText)) return "";
+    const raw = courseData?.certificationText?.description;
+    if (!isNonEmptyHtml(raw)) return "";
+    const stripped = raw.replace(/<[^>]*>/g, "").trim().toLowerCase();
+    if (stripped === "sample certificate image") return "";
+    return raw;
+  }, [courseData, targetCourseId]);
+
+  const certificateImagePath = useMemo(() => {
+    if (!belongsToCourse(courseData?.certificationImage)) return "";
+    const raw = courseData?.certificationImage?.image_path;
+    return isNonEmptyText(raw) ? raw : "";
+  }, [courseData, targetCourseId]);
+
+  const hasCertificate = Boolean(certificateDescriptionHtml || certificateImagePath);
+
   const [isMounted, setIsMounted] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("highlights");
@@ -314,190 +379,225 @@ export default function DedicatedSyllabusPage({
       .join(" ");
   }, [pageType]);
 
+  const validAllHeadline = useMemo(
+    () => (belongsToCourse(courseData?.allHeadline) ? courseData.allHeadline : null),
+    [courseData, targetCourseId]
+  );
+
+  const validDynamicHeading = useMemo(
+    () => (belongsToCourse(courseData?.dynamicCourseHeading) ? courseData.dynamicCourseHeading : null),
+    [courseData, targetCourseId]
+  );
+
+  const validCourseHeading = useMemo(
+    () => (belongsToCourse(courseData?.courseHeading) ? courseData.courseHeading : null),
+    [courseData, targetCourseId]
+  );
+
   const courseTitle = useMemo(
     () =>
       courseData?.support_page?.title ||
       courseData?.course?.course_title ||
       courseData?.course?.name ||
       courseData?.course_title ||
-      courseData?.courseHeading?.title ||
-      courseData?.dynamicCourseHeading?.heading ||
+      validCourseHeading?.title ||
+      validDynamicHeading?.heading ||
       (url_title ? url_title.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : `Course ${pageLabel}`),
-    [courseData, url_title, pageLabel]
+    [courseData, validCourseHeading, validDynamicHeading, url_title, pageLabel]
   );
 
   const heroHeadline = useMemo(() => {
     return (
-      courseData?.dynamicCourseHeading?.page_title ||
-      courseData?.dynamicCourseHeading?.meta_title ||
-      courseData?.courseHeading?.title ||
-      `Master ${courseTitle} through Live Online Training for Learners Based in India`
+      validDynamicHeading?.hone_tag ||
+      validDynamicHeading?.page_title ||
+      validDynamicHeading?.meta_title ||
+      validCourseHeading?.title ||
+      courseData?.support_page?.title ||
+      courseTitle
     );
-  }, [courseData, courseTitle]);
+  }, [validDynamicHeading, validCourseHeading, courseData, courseTitle]);
 
   const heroSubtitle = useMemo(() => {
-    return (
-      courseData?.bulletPoints?.course_description ||
-      courseData?.courseDescription?.description ||
-      courseData?.course?.short_description ||
-      courseData?.seo?.description ||
-      `Master core and advanced ${courseTitle} to crack top-tier technical interviews and build scalable systems.`
-    );
-  }, [courseData, courseTitle]);
+    const bpDesc = belongsToCourse(courseData?.bulletPoints)
+      ? courseData?.bulletPoints?.course_description
+      : "";
+    const cdDesc = belongsToCourse(courseData?.courseDescription)
+      ? courseData?.courseDescription?.description
+      : "";
+    const raw =
+      (isNonEmptyText(bpDesc) && bpDesc) ||
+      (isNonEmptyText(cdDesc) && cdDesc) ||
+      (isNonEmptyText(courseData?.course?.short_description) && courseData?.course?.short_description) ||
+      (isNonEmptyText(courseData?.seo?.description) && courseData?.seo?.description) ||
+      "";
+    return raw;
+  }, [courseData, targetCourseId]);
 
   const heroBulletPoints = useMemo(() => {
+    if (!belongsToCourse(courseData?.bulletPoints)) return [];
     try {
       const raw = courseData?.bulletPoints?.course_highlights_in_pointers;
       if (raw) {
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => isNonEmptyText(item));
+        }
       }
     } catch (e) {}
-    return [
-      "Improved customer satisfaction: Better service and support for clients.",
-      "Increased profitability: Stronger financial performance.",
-      "Improved organizational culture: A more positive and supportive work environment.",
-      "Enhanced risk management: More effective identification and mitigation of risks."
-    ];
-  }, [courseData]);
+    return [];
+  }, [courseData, targetCourseId]);
 
-  // Overview Section (Screenshot 2)
+  // Overview Section (only when provided from backend)
   const overviewHeading = useMemo(() => {
     return (
-      courseData?.allHeadline?.program_overview ||
-      `Overview of ${courseTitle} Certification Training Programs in the India`
+      validAllHeadline?.program_overview ||
+      `Overview of ${courseTitle}`
     );
-  }, [courseData, courseTitle]);
+  }, [validAllHeadline, courseTitle]);
 
   const overviewHtml = useMemo(() => {
-    return (
-      courseData?.courseOverview?.course_overview ||
-      courseData?.course?.overview ||
-      courseData?.overview ||
-      `<p>Professionals can gain a thorough grasp of fundamental and advanced computational principles by enrolling in ScholarAcad's ${courseTitle} Certification Training in the India. Skilled practitioners are in high demand to guarantee maximum value delivery as firms throughout the India implement modern techniques.</p><p>The duties, such as developing the product vision, monitoring and improving efficiency, working with stakeholders, and guaranteeing alignment between business objectives and development teams, are highlighted in this training program. Participants acquire useful skills to provide customer-focused solutions and make well-informed product selections.</p><p>The training, which is taught by seasoned certified instructors, provides practical insights into the difficulties that professionals have in hectic workplaces.</p><p>Professionals can improve their skills in a variety of areas, including IT, finance, healthcare, e-commerce, consulting, manufacturing, and startups, by obtaining this certification through ScholarAcad. The curriculum gives students the self-assurance they need to carry out their role successfully and promote ongoing value delivery.</p><p>Interactive conversations, team-building activities, and real-world scenarios that mirror the difficulties experienced by India-based firms are also beneficial to participants. Professionals may manage learning and work obligations using flexible learning options, such as corporate training and live online courses.</p>`
-    );
-  }, [courseData, courseTitle]);
+    const co = belongsToCourse(courseData?.courseOverview)
+      ? courseData?.courseOverview?.course_overview
+      : "";
+    const raw =
+      (isNonEmptyHtml(co) && co) ||
+      (isNonEmptyHtml(courseData?.course?.overview) && courseData?.course?.overview) ||
+      (isNonEmptyHtml(courseData?.overview) && courseData?.overview) ||
+      "";
+    return raw;
+  }, [courseData, targetCourseId]);
 
-  // Key Features Section (Screenshot 3)
+  // Key Features Section (only when provided from backend)
   const keyFeaturesHeading = useMemo(() => {
     return (
-      courseData?.allHeadline?.training_highlights ||
+      validAllHeadline?.training_highlights ||
       `${courseTitle} Training: Key Features & Benefits`
     );
-  }, [courseData, courseTitle]);
+  }, [validAllHeadline, courseTitle]);
 
   const keyFeaturesList = useMemo(() => {
+    if (!belongsToCourse(courseData?.keyfeatures)) return [];
     const kf = courseData?.keyfeatures || {};
     return [
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon1.svg",
         fallbackIcon: "⏰",
-        text: kf.record_one || "16 hours of instructor led Training",
+        text: kf.record_one,
       },
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon2.svg",
         fallbackIcon: "🔄",
-        text: kf.record_two || "Innovative, tailor-made solutions for your Project requirements",
+        text: kf.record_two,
       },
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon3.svg",
         fallbackIcon: "💡",
-        text: kf.record_three || "Our Flexi Pass offers you the flexibility to repeat the training in one year",
+        text: kf.record_three,
       },
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon4.svg",
         fallbackIcon: "🎁",
-        text: kf.record_four || "100+ Question with Rational to practice",
+        text: kf.record_four,
       },
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon5.svg",
         fallbackIcon: "📝",
-        text: kf.record_five || "Get Exam Voucher within Training Cost",
+        text: kf.record_five,
       },
       {
         icon: "/assets/landingpage/keyfeature/keyfeature_icon6.svg",
         fallbackIcon: "🎧",
-        text: kf.record_six || "After Training support for exam prepration",
+        text: kf.record_six,
       },
-    ];
-  }, [courseData]);
+    ].filter((item) => isNonEmptyText(item.text));
+  }, [courseData, targetCourseId]);
 
-  // Why ScholarAcad Section (Screenshot 4)
+  // Why ScholarAcad Section (only when provided from backend)
   const whyScholarAcadHeading = useMemo(() => {
     return (
-      courseData?.allHeadline?.advantage ||
-      `Why ScholarAcad Is the Right Choice for ${courseTitle} Training in India`
+      validAllHeadline?.advantage ||
+      `Why ScholarAcad Is the Right Choice for ${courseTitle}`
     );
-  }, [courseData, courseTitle]);
+  }, [validAllHeadline, courseTitle]);
 
   const whyScholarAcadItems = useMemo(() => {
+    if (!belongsToCourse(courseData?.courseWhyScholarAcad)) return [];
     const adv = courseData?.courseWhyScholarAcad || {};
-    const c1 = safeJsonParse(adv.record_one, {
-      heading: "Increased Motivation",
-      description: "Stay motivated and driven to achieve your goals."
-    });
-    const c2 = safeJsonParse(adv.record_two, {
-      heading: "Improved Networking Skills",
-      description: "Develop strong relationships with professionals in your field."
-    });
-    const c3 = safeJsonParse(adv.record_three, {
-      heading: "Increased Job Satisfaction",
-      description: "Find more fulfillment and satisfaction in your work"
-    });
-    const c4 = safeJsonParse(adv.record_four, {
-      heading: "Improved Employee Engagement",
-      description: "Foster a positive and engaging work environment."
-    });
-    return [
-      { num: "01", badgeBg: "bg-[#F07F39]", ...c1 },
-      { num: "02", badgeBg: "bg-[#ED7070]", ...c2 },
-      { num: "03", badgeBg: "bg-[#FFB340]", ...c3 },
-      { num: "04", badgeBg: "bg-[#5FA33E]", ...c4 },
+    const badgeBgs = [
+      "bg-[#F07F39]",
+      "bg-[#ED7070]",
+      "bg-[#FFB340]",
+      "bg-[#5FA33E]",
+      "bg-[#535D9D]",
+      "bg-[#E16AE8]",
+      "bg-[#17AFA8]",
+      "bg-[#6386FF]",
+      "bg-[#5ED3FF]",
     ];
-  }, [courseData]);
+    const keys = [
+      "record_one",
+      "record_two",
+      "record_three",
+      "record_four",
+      "record_five",
+      "record_six",
+      "record_seven",
+      "record_eight",
+      "record_nine",
+    ];
+    return keys
+      .map((key, idx) => {
+        const parsed = safeJsonParse(adv[key], {});
+        if (!isNonEmptyText(parsed?.heading)) return null;
+        return {
+          num: String(idx + 1).padStart(2, "0"),
+          badgeBg: badgeBgs[idx % badgeBgs.length],
+          heading: parsed.heading.trim(),
+          description: isNonEmptyText(parsed?.description) ? parsed.description.trim() : "",
+        };
+      })
+      .filter(Boolean);
+  }, [courseData, targetCourseId]);
 
-  // What You'll Learn Section (Screenshot 5)
+  // What You'll Learn Section (only when provided from backend)
   const whatYouLearnHeading = useMemo(() => {
     return (
-      courseData?.allHeadline?.new_learning_objectives ||
-      `What You'll Learn from the ${courseTitle} Certification Course in India`
+      validAllHeadline?.new_learning_objectives ||
+      `What You'll Learn from the ${courseTitle} Course`
     );
-  }, [courseData, courseTitle]);
+  }, [validAllHeadline, courseTitle]);
 
   const whatYouLearnDesc = useMemo(() => {
-    return (
-      courseData?.whatyoulearn?.description ||
-      `You can become a successful practitioner in a high-demand industry by completing the ${courseTitle} Certification course in India. You will learn how to prioritize and manage requirements, work with stakeholders, convert business needs into useful product features, and promote product success by providing customers and organizations with the most value possible.`
-    );
-  }, [courseData, courseTitle]);
+    if (!belongsToCourse(courseData?.whatyoulearn)) return "";
+    const desc = courseData?.whatyoulearn?.description;
+    return isNonEmptyHtml(desc) ? desc : "";
+  }, [courseData, targetCourseId]);
 
   const whatYouLearnPointers = useMemo(() => {
+    if (!belongsToCourse(courseData?.whatyoulearn)) return [];
     try {
       const raw = courseData?.whatyoulearn?.pointers;
       if (raw) {
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => isNonEmptyText(item));
+        }
       }
     } catch (e) {}
-    return [
-      "Recognize the fundamental ideas and ideals of the Scrum and Agile frameworks.",
-      "Discover the duties and obligations of a Scrum Product Owner.",
-      "Learn how to create, prioritize, and refine product backlogs.",
-      "Learn how to create, prioritize, and refine product backlogs.",
-      "Discover how to make well-informed decisions to optimize product value and ROI.",
-      "Boost cooperation and comm stakeholders",
-      "Use case studies and real-world examples to implement Scrum practices."
-    ];
-  }, [courseData]);
+    return [];
+  }, [courseData, targetCourseId]);
 
-  const curriculumHtml = useMemo(
-    () =>
-      courseData?.support_page?.content ||
-      courseData?.courseDescription?.curriculum ||
-      courseData?.curriculum ||
-      '',
-    [courseData]
-  );
+  const curriculumHtml = useMemo(() => {
+    const descCurr = belongsToCourse(courseData?.courseDescription)
+      ? courseData?.courseDescription?.curriculum
+      : "";
+    const raw =
+      (isNonEmptyHtml(courseData?.support_page?.content) && courseData.support_page.content) ||
+      (isNonEmptyHtml(descCurr) && descCurr) ||
+      (isNonEmptyHtml(courseData?.curriculum) && courseData.curriculum) ||
+      "";
+    return raw;
+  }, [courseData, targetCourseId]);
 
   const breadcrumb = useMemo(() => {
     return Array.isArray(courseData?.breadcrumb) && courseData.breadcrumb.length > 0
@@ -506,45 +606,85 @@ export default function DedicatedSyllabusPage({
   }, [courseData]);
 
   const pdfUrl = useMemo(() => {
-    if (courseData?.coursePDF?.curriculum_pdf_name) {
+    if (belongsToCourse(courseData?.coursePDF) && isNonEmptyText(courseData?.coursePDF?.curriculum_pdf_name)) {
       return `${API_BASE_URL}/assets/courseCurriculum/${courseData.coursePDF.curriculum_pdf_name}`;
     }
     return null;
-  }, [courseData]);
+  }, [courseData, targetCourseId]);
 
   const courseImage = useMemo(() => {
+    const bannerImg = belongsToCourse(courseData?.courseImage)
+      ? courseData?.courseImage?.banner_image_path
+      : null;
     const raw =
       courseData?.header_image ||
       courseData?.course?.header_image ||
       courseData?.support_page?.image ||
-      courseData?.courseImage?.banner_image_path ||
-      courseData?.certificationImage?.image_path ||
-      courseData?.dynamicCourseHeading?.header_image;
+      bannerImg ||
+      certificateImagePath ||
+      validDynamicHeading?.header_image;
     return getCourseImageUrl(raw, '/assets/landingpage/courses/course1.jpg');
-  }, [courseData]);
+  }, [courseData, certificateImagePath, validDynamicHeading, targetCourseId]);
 
   const faqs = useMemo(() => {
-    if (Array.isArray(courseData?.CourseFaqs) && courseData.CourseFaqs.length > 0) return courseData.CourseFaqs;
-    if (Array.isArray(courseData?.faqs) && courseData.faqs.length > 0) return courseData.faqs;
-    return [
-      {
-        question: `What are the prerequisites for the ${courseTitle} course?`,
-        answer: "There are no formal prerequisites. Basic understanding of computing concepts and problem-solving is helpful."
-      },
-      {
-        question: `How will I access the training material and sessions?`,
-        answer: "Upon enrollment, you receive lifetime access to the ScholarAcad LMS platform including live session recordings, lecture notes, and quizzes."
-      },
-      {
-        question: `What is the ScholarAcad Flexi Pass?`,
-        answer: "The Flexi Pass allows you to attend multiple batches with different instructors for up to 365 days from your registration date without any extra charge."
-      },
-      {
-        question: `Do you provide certification and placement assistance?`,
-        answer: "Yes, upon completing the course assessments you receive an accredited certification and direct resume guidance with placement support."
-      }
-    ];
-  }, [courseData, courseTitle]);
+    const filterFaqArray = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(
+        (item) =>
+          (!item?.course_id || !targetCourseId || Number(item.course_id) === Number(targetCourseId)) &&
+          isNonEmptyText(item?.question || item?.title)
+      );
+    };
+    const fromCourseFaqs = filterFaqArray(courseData?.CourseFaqs);
+    if (fromCourseFaqs.length > 0) return fromCourseFaqs;
+    const fromCurrFaqs = filterFaqArray(courseData?.courseCurriculumFAQ);
+    if (fromCurrFaqs.length > 0) return fromCurrFaqs;
+    const fromFaqs = filterFaqArray(courseData?.faqs);
+    if (fromFaqs.length > 0) return fromFaqs;
+    return [];
+  }, [courseData, targetCourseId]);
+
+  const validCoursePlans = useMemo(() => {
+    if (!Array.isArray(courseData?.coursePlan)) return [];
+    return courseData.coursePlan.filter(
+      (plan) => isNonEmptyText(plan?.plan_name) || (Array.isArray(plan?.features) && plan.features.length > 0)
+    );
+  }, [courseData]);
+
+  const validCourseSchedules = useMemo(() => {
+    if (!Array.isArray(courseData?.courseSchedule)) return [];
+    return courseData.courseSchedule.filter((s) => belongsToCourse(s));
+  }, [courseData, targetCourseId]);
+
+  const hasCalendarSection = useMemo(
+    () => Boolean(isNonEmptyText(validAllHeadline?.schedule) || validCourseSchedules.length > 0),
+    [validAllHeadline, validCourseSchedules]
+  );
+
+  const hasCorporateTrainingBanner = useMemo(
+    () => Boolean(isNonEmptyText(validAllHeadline?.training_options) || validCoursePlans.length > 0),
+    [validAllHeadline, validCoursePlans]
+  );
+
+  const hasHiringPartners = useMemo(() => {
+    if (!Array.isArray(courseData?.hiringCompanies)) return false;
+    return courseData.hiringCompanies.filter((item) => belongsToCourse(item)).length > 0;
+  }, [courseData, targetCourseId]);
+
+  const hasStatsBanner = useMemo(
+    () =>
+      Boolean(
+        isNonEmptyText(validAllHeadline?.course_benefits) ||
+          (belongsToCourse(courseData?.courseBenefits) &&
+            isNonEmptyHtml(courseData?.courseBenefits?.why_course_important_readmore))
+      ),
+    [validAllHeadline, courseData, targetCourseId]
+  );
+
+  const hasTrendingCoursesBanner = useMemo(
+    () => Boolean(isNonEmptyText(validAllHeadline?.recommended_course)),
+    [validAllHeadline]
+  );
 
   const navTabs = useMemo(() => {
     const tabs = [
@@ -554,13 +694,13 @@ export default function DedicatedSyllabusPage({
       { id: "whychooseus", label: "Why Choose Us", show: whyScholarAcadItems && whyScholarAcadItems.length > 0 },
       { id: "whatyoulearn", label: "What You'll Learn", show: (whatYouLearnPointers && whatYouLearnPointers.length > 0) || Boolean(whatYouLearnDesc) },
       { id: "curriculum", label: "Curriculum", show: Boolean(curriculumHtml) },
-      { id: "trainingoptions", label: "Training Options", show: true },
-      { id: "contact", label: "Contact", show: true },
+      { id: "trainingoptions", label: "Training Options", show: validCoursePlans.length > 0 },
+      { id: "contact", label: "Contact", show: hasCalendarSection },
       { id: "roadmap", label: "Roadmap", show: hasRoadmap },
       { id: "faqs", label: "FAQs", show: faqs && faqs.length > 0 },
     ];
     return tabs.filter((t) => t.show);
-  }, [courseData, overviewHtml, keyFeaturesList, whyScholarAcadItems, whatYouLearnPointers, whatYouLearnDesc, curriculumHtml, hasRoadmap, faqs]);
+  }, [overviewHtml, keyFeaturesList, whyScholarAcadItems, whatYouLearnPointers, whatYouLearnDesc, curriculumHtml, validCoursePlans, hasCalendarSection, hasRoadmap, faqs]);
 
   const courseSlug = url_title || '';
   const mainCourseUrl = `/${courseSlug}`;
@@ -642,10 +782,13 @@ export default function DedicatedSyllabusPage({
       title: seoTitle,
       description: seoDesc,
       pageUrl: canonicalPath,
+      courseName: courseTitle,
+      courseData,
+      imageUrl: courseImage,
       breadcrumbs: schemaBreadcrumbs,
       faqs: faqs
     });
-  }, [seoTitle, seoDesc, canonicalPath, schemaBreadcrumbs, faqs]);
+  }, [seoTitle, seoDesc, canonicalPath, courseTitle, courseData, courseImage, schemaBreadcrumbs, faqs]);
 
   if (loading && !courseData) {
     return (
@@ -736,49 +879,86 @@ export default function DedicatedSyllabusPage({
                   {heroHeadline}
                 </h1>
 
-                <p className="text-sm sm:text-base text-gray-600 leading-relaxed font-normal">
-                  {heroSubtitle}
-                </p>
+                {heroSubtitle && (
+                  <p className="text-sm sm:text-base text-gray-600 leading-relaxed font-normal">
+                    {heroSubtitle}
+                  </p>
+                )}
 
                 {/* Ratings Row (Matching Screenshot 1) */}
-                <div className="flex items-center flex-wrap gap-4 pt-1">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 text-base sm:text-lg">
-                      <FcGoogle />
-                      <span className="text-black font-bold text-sm">
-                        {courseData?.ratings?.googleRating || courseData?.dynamicCourseHeading?.googleRating || "5.0"}
-                      </span>
+                {(belongsToCourse(courseData?.ratings) ||
+                  isNonEmptyText(validDynamicHeading?.googleRating) ||
+                  isNonEmptyText(validDynamicHeading?.facebook) ||
+                  isNonEmptyText(validDynamicHeading?.installgram) ||
+                  isNonEmptyText(validDynamicHeading?.enrolled)) && (
+                  <div className="flex items-center flex-wrap gap-4 pt-1">
+                    <div className="flex items-center gap-4">
+                      {isNonEmptyText(
+                        (belongsToCourse(courseData?.ratings) && courseData?.ratings?.googleRating) ||
+                          validDynamicHeading?.googleRating
+                      ) && (
+                        <div className="flex items-center gap-1.5 text-base sm:text-lg">
+                          <FcGoogle />
+                          <span className="text-black font-bold text-sm">
+                            {(belongsToCourse(courseData?.ratings) && courseData?.ratings?.googleRating) ||
+                              validDynamicHeading?.googleRating}
+                          </span>
+                        </div>
+                      )}
+                      {isNonEmptyText(
+                        (belongsToCourse(courseData?.ratings) && courseData?.ratings?.facebook) ||
+                          validDynamicHeading?.facebook
+                      ) && (
+                        <div className="flex items-center gap-1.5 text-base sm:text-lg text-[#1877F2]">
+                          <IoLogoFacebook />
+                          <span className="text-black font-bold text-sm">
+                            {(belongsToCourse(courseData?.ratings) && courseData?.ratings?.facebook) ||
+                              validDynamicHeading?.facebook}
+                          </span>
+                        </div>
+                      )}
+                      {isNonEmptyText(
+                        (belongsToCourse(courseData?.ratings) && courseData?.ratings?.installgram) ||
+                          validDynamicHeading?.installgram
+                      ) && (
+                        <div className="flex items-center gap-1.5 text-base sm:text-lg text-[#E1306C]">
+                          <FaSquareInstagram />
+                          <span className="text-black font-bold text-sm">
+                            {(belongsToCourse(courseData?.ratings) && courseData?.ratings?.installgram) ||
+                              validDynamicHeading?.installgram}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-base sm:text-lg text-[#1877F2]">
-                      <IoLogoFacebook />
-                      <span className="text-black font-bold text-sm">
-                        {courseData?.ratings?.facebook || courseData?.dynamicCourseHeading?.facebook || "5.0"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-base sm:text-lg text-[#E1306C]">
-                      <FaSquareInstagram />
-                      <span className="text-black font-bold text-sm">
-                        {courseData?.ratings?.installgram || courseData?.dynamicCourseHeading?.installgram || "5.0"}
-                      </span>
-                    </div>
+                    {isNonEmptyText(
+                      (belongsToCourse(courseData?.ratings) && courseData?.ratings?.enrolled) ||
+                        validDynamicHeading?.enrolled
+                    ) && (
+                      <>
+                        <div className="h-4 w-px bg-gray-300"></div>
+                        <span className="text-sm font-semibold text-gray-500 whitespace-nowrap">
+                          {(belongsToCourse(courseData?.ratings) && courseData?.ratings?.enrolled) ||
+                            validDynamicHeading?.enrolled}{" "}
+                          Enrolled
+                        </span>
+                      </>
+                    )}
                   </div>
-                  <div className="h-4 w-px bg-gray-300"></div>
-                  <span className="text-sm font-semibold text-gray-500 whitespace-nowrap">
-                    {courseData?.ratings?.enrolled || courseData?.dynamicCourseHeading?.enrolled || "6000+"} Enrolled
-                  </span>
-                </div>
+                )}
 
-                {/* 4 Checkmark Bullet Points (Matching Screenshot 1) */}
-                <div className="space-y-2.5 pt-2">
-                  {heroBulletPoints.map((point, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5">
-                      <FaCheckSquare className="text-[#2E318D] text-base shrink-0 mt-0.5" />
-                      <p className="text-xs sm:text-sm text-gray-700 leading-snug">
-                        {point}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {/* Checkmark Bullet Points (Matching Screenshot 1) */}
+                {heroBulletPoints.length > 0 && (
+                  <div className="space-y-2.5 pt-2">
+                    {heroBulletPoints.map((point, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <FaCheckSquare className="text-[#2E318D] text-base shrink-0 mt-0.5" />
+                        <p className="text-xs sm:text-sm text-gray-700 leading-snug">
+                          {point}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="pt-4 flex flex-wrap items-center gap-3.5">
@@ -894,196 +1074,181 @@ export default function DedicatedSyllabusPage({
             {/* Right Column: Main Content Sections */}
             <div className="lg:col-span-8 space-y-10">
               {/* Section 1: Course Overview (Matching Screenshot 2) */}
-              <div id="overview" className="bg-[#EDE3FF] rounded-2xl border border-purple-200/80 p-6 sm:p-8 shadow-xs scroll-mt-36">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-4 leading-snug">
-                  {overviewHeading}
-                </h2>
-                <div
-                  className="prose max-w-none text-gray-700 text-sm sm:text-base leading-relaxed space-y-3.5 prose-p:mb-3"
-                  dangerouslySetInnerHTML={{
-                    __html: safeHtml(overviewHtml),
-                  }}
-                />
-              </div>
+              {Boolean(overviewHtml) && (
+                <div id="overview" className="bg-[#EDE3FF] rounded-2xl border border-purple-200/80 p-6 sm:p-8 shadow-xs scroll-mt-36">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-4 leading-snug">
+                    {overviewHeading}
+                  </h2>
+                  <div
+                    className="prose max-w-none text-gray-700 text-sm sm:text-base leading-relaxed space-y-3.5 prose-p:mb-3"
+                    dangerouslySetInnerHTML={{
+                      __html: safeHtml(overviewHtml),
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Section 2: Key Features & Benefits (Matching Screenshot 3) */}
-              <div id="keyfeatures" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-6 text-center">
-                  {keyFeaturesHeading}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-                  {keyFeaturesList.map((feature, idx) => (
-                    <div
-                      key={idx}
-                      className="flex flex-col items-start p-4 rounded-xl border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 transition group"
-                    >
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">
-                        <img
-                          src={feature.icon}
-                          alt="Feature Icon"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            if (e.currentTarget.nextSibling) {
-                              e.currentTarget.nextSibling.style.display = 'block';
-                            }
-                          }}
-                          className="w-10 h-10 object-contain"
-                        />
-                        <span className="hidden text-2xl">{feature.fallbackIcon}</span>
+              {keyFeaturesList.length > 0 && (
+                <div id="keyfeatures" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-6 text-center">
+                    {keyFeaturesHeading}
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+                    {keyFeaturesList.map((feature, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col items-start p-4 rounded-xl border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 transition group"
+                      >
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">
+                          <img
+                            src={feature.icon}
+                            alt="Feature Icon"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.nextSibling) {
+                                e.currentTarget.nextSibling.style.display = 'block';
+                              }
+                            }}
+                            className="w-10 h-10 object-contain"
+                          />
+                          <span className="hidden text-2xl">{feature.fallbackIcon}</span>
+                        </div>
+                        <p className="font-semibold text-gray-700 text-xs sm:text-sm leading-snug">
+                          {feature.text}
+                        </p>
                       </div>
-                      <p className="font-semibold text-gray-700 text-xs sm:text-sm leading-snug">
-                        {feature.text}
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Section 3: Why ScholarAcad Is the Right Choice (Matching Screenshot 4) */}
-              <div id="whychooseus" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-8 text-center leading-snug">
-                  {whyScholarAcadHeading}
-                </h2>
+              {whyScholarAcadItems.length > 0 && (
+                <div id="whychooseus" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-8 text-center leading-snug">
+                    {whyScholarAcadHeading}
+                  </h2>
 
-                <div className="relative py-4">
-                  {/* Vertical Navy Line */}
-                  <div className="hidden sm:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-[#2E318D] -translate-x-1/2 z-0"></div>
+                  <div className="relative py-4">
+                    {/* Vertical Navy Line */}
+                    <div className="hidden sm:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-[#2E318D] -translate-x-1/2 z-0"></div>
 
-                  <div className="space-y-6 sm:space-y-8 relative z-10">
-                    {whyScholarAcadItems.map((item, idx) => {
-                      const isEven = idx % 2 === 1; // 01 left, 02 right, 03 left, 04 right
-                      return (
-                        <div
-                          key={idx}
-                          className={`flex flex-col sm:flex-row items-center ${
-                            isEven ? "sm:flex-row-reverse" : ""
-                          } gap-4 sm:gap-8`}
-                        >
-                          {/* Card Half */}
-                          <div className="w-full sm:w-1/2">
-                            <div className="relative bg-[#F7F3FF] border border-purple-100 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-xs">
-                              <div
-                                className={`${item.badgeBg} text-white shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center font-bold text-lg shadow-sm`}
-                              >
-                                <span>{item.num}</span>
-                                <img
-                                  src="/assets/landingpage/courses/check.svg"
-                                  alt="Check"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                  className="h-3.5 w-auto mt-0.5 object-contain"
-                                />
-                              </div>
-                              <div className="text-left">
-                                <h3 className="font-bold text-gray-900 text-sm sm:text-base">
-                                  {item.heading}
-                                </h3>
-                                <p className="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed">
-                                  {item.description}
-                                </p>
+                    <div className="space-y-6 sm:space-y-8 relative z-10">
+                      {whyScholarAcadItems.map((item, idx) => {
+                        const isEven = idx % 2 === 1; // 01 left, 02 right, 03 left, 04 right
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex flex-col sm:flex-row items-center ${
+                              isEven ? "sm:flex-row-reverse" : ""
+                            } gap-4 sm:gap-8`}
+                          >
+                            {/* Card Half */}
+                            <div className="w-full sm:w-1/2">
+                              <div className="relative bg-[#F7F3FF] border border-purple-100 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-xs">
+                                <div
+                                  className={`${item.badgeBg} text-white shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center font-bold text-lg shadow-sm`}
+                                >
+                                  <span>{item.num}</span>
+                                  <img
+                                    src="/assets/landingpage/courses/check.svg"
+                                    alt="Check"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    className="h-3.5 w-auto mt-0.5 object-contain"
+                                  />
+                                </div>
+                                <div className="text-left">
+                                  <h3 className="font-bold text-gray-900 text-sm sm:text-base">
+                                    {item.heading}
+                                  </h3>
+                                  <p className="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed">
+                                    {item.description}
+                                  </p>
+                                </div>
                               </div>
                             </div>
+
+                            {/* Center Node on Timeline (Desktop) */}
+                            <div className="hidden sm:flex shrink-0 w-5 h-5 rounded-full bg-[#2E318D] border-2 border-white shadow-md z-20 items-center justify-center"></div>
+
+                            {/* Spacer Half */}
+                            <div className="hidden sm:block sm:w-1/2"></div>
                           </div>
-
-                          {/* Center Node on Timeline (Desktop) */}
-                          <div className="hidden sm:flex shrink-0 w-5 h-5 rounded-full bg-[#2E318D] border-2 border-white shadow-md z-20 items-center justify-center"></div>
-
-                          {/* Spacer Half */}
-                          <div className="hidden sm:block sm:w-1/2"></div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Section 4: What You'll Learn (Matching Screenshot 5) */}
-              <div id="whatyoulearn" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3 text-center leading-snug">
-                  {whatYouLearnHeading}
-                </h2>
-                <p className="text-xs sm:text-sm text-gray-600 text-center max-w-3xl mx-auto mb-6 leading-relaxed">
-                  {whatYouLearnDesc}
-                </p>
-
-                {/* 2-Column Chevrons Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
-                  {whatYouLearnPointers.map((text, idx) => (
-                    <ChevronItem key={idx} text={text} index={idx} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Section 5: Curriculum Breakdown & Detailed Modules */}
-              <div id="curriculum" className="bg-[#FAF8FE] border border-purple-100 rounded-2xl p-6 sm:p-8 shadow-xs scroll-mt-36">
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-3 border-b border-purple-100/70">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-                      <FaBook className="text-[#882CFB]" />
-                      Detailed Course Modules & Curriculum
-                    </h2>
-                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                      Step-by-step module breakdown prepared by certified instructors
+              {(Boolean(whatYouLearnDesc) || whatYouLearnPointers.length > 0) && (
+                <div id="whatyoulearn" className="bg-white rounded-2xl border border-gray-200/90 p-6 sm:p-8 shadow-xs scroll-mt-36">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3 text-center leading-snug">
+                    {whatYouLearnHeading}
+                  </h2>
+                  {whatYouLearnDesc && (
+                    <p className="text-xs sm:text-sm text-gray-600 text-center max-w-3xl mx-auto mb-6 leading-relaxed">
+                      {whatYouLearnDesc}
                     </p>
-                  </div>
-                  {pdfUrl && (
-                    <a
-                      href={pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-semibold text-[#882CFB] hover:text-[#4347ca] flex items-center gap-1.5"
-                    >
-                      <FaDownload /> Download PDF
-                    </a>
+                  )}
+
+                  {/* 2-Column Chevrons Grid */}
+                  {whatYouLearnPointers.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+                      {whatYouLearnPointers.map((text, idx) => (
+                        <ChevronItem key={idx} text={text} index={idx} />
+                      ))}
+                    </div>
                   )}
                 </div>
+              )}
 
-                {curriculumHtml ? (
+              {/* Section 5: Curriculum Breakdown & Detailed Modules */}
+              {Boolean(curriculumHtml) && (
+                <div id="curriculum" className="bg-[#FAF8FE] border border-purple-100 rounded-2xl p-6 sm:p-8 shadow-xs scroll-mt-36">
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-3 border-b border-purple-100/70">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <FaBook className="text-[#882CFB]" />
+                        {validAllHeadline?.curriculum_breakdown || "Detailed Course Modules & Curriculum"}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                        Step-by-step module breakdown prepared by certified instructors
+                      </p>
+                    </div>
+                    {pdfUrl && (
+                      <a
+                        href={pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-[#882CFB] hover:text-[#4347ca] flex items-center gap-1.5"
+                      >
+                        <FaDownload /> Download PDF
+                      </a>
+                    )}
+                  </div>
+
                   <div
                     className="prose max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700"
                     dangerouslySetInnerHTML={{
                       __html: safeHtml(curriculumHtml),
                     }}
                   />
-                ) : (
-                  <div className="space-y-3.5">
-                    <div className="p-4 rounded-xl border border-gray-200 bg-white">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                        Module 1: Time & Space Complexity Analysis
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600">
-                        Big-O, Big-Omega, Big-Theta, recursion trees, and master theorem.
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-xl border border-gray-200 bg-white">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                        Module 2: Linear Data Structures & Pointer Patterns
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600">
-                        Arrays, Linked Lists, Stacks, Queues, and Hash Tables with LRU cache.
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-xl border border-gray-200 bg-white">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                        Module 3: Non-Linear Trees, Heaps & Graphs
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600">
-                        BST, AVL rotations, Heaps, Graph traversals (BFS, DFS), and Dijkstra algorithm.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Section: Training Options (Dynamic from backend coursePlan) */}
-              {Array.isArray(courseData?.coursePlan) && courseData.coursePlan.length > 0 && (
+              {validCoursePlans.length > 0 && (
                 <div id="trainingoptions" className="py-4 scroll-mt-36">
                   <div className="flex justify-center items-center flex-col mb-6">
                     <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 text-center">
-                      {courseData?.allHeadline?.training_options || "Training Options"}
+                      {validAllHeadline?.training_options || "Training Options"}
                     </h2>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
-                    {courseData.coursePlan.map((plan, index) => {
+                    {validCoursePlans.map((plan, index) => {
                       const bgColors = ["bg-[#FFBCBD]", "bg-[#C1E1C1]", "bg-[#CFE2FF]"];
                       const bgClass = bgColors[index % bgColors.length];
                       return (
@@ -1131,38 +1296,40 @@ export default function DedicatedSyllabusPage({
               )}
 
               {/* Section: Corporate Training Banner (Peach card) */}
-              <div id="corporate-training" className="py-2">
-                <div className="corporate_trainning_bg p-5 text-[#2E318D] rounded-2xl border border-gray-300">
-                  <div className="grid md:grid-cols-3 grid-cols-1 md:max-w-[95%] w-full m-auto items-center">
-                    <div>
-                      <h2 className="font-bold text-2xl text-[#2E318D]">
-                        Corporate Training
-                      </h2>
-                      <ul className="list-disc pl-5 text-gray-700 mt-3 space-y-1 text-sm sm:text-base">
-                        <li>Impactful Instructor Led Training</li>
-                        <li>Wide range of Training dates.</li>
-                      </ul>
-                    </div>
+              {hasCorporateTrainingBanner && (
+                <div id="corporate-training" className="py-2">
+                  <div className="corporate_trainning_bg p-5 text-[#2E318D] rounded-2xl border border-gray-300">
+                    <div className="grid md:grid-cols-3 grid-cols-1 md:max-w-[95%] w-full m-auto items-center">
+                      <div>
+                        <h2 className="font-bold text-2xl text-[#2E318D]">
+                          Corporate Training
+                        </h2>
+                        <ul className="list-disc pl-5 text-gray-700 mt-3 space-y-1 text-sm sm:text-base">
+                          <li>Impactful Instructor Led Training</li>
+                          <li>Wide range of Training dates.</li>
+                        </ul>
+                      </div>
 
-                    <div className="mt-4 md:mt-0 flex justify-center">
-                      <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-[#882CFB] hover:bg-[#7221D8] text-white font-semibold px-6 py-2.5 rounded-full transition shadow-sm cursor-pointer text-sm sm:text-base flex items-center gap-2"
-                      >
-                        Contact Advisor &rarr;
-                      </button>
-                    </div>
+                      <div className="mt-4 md:mt-0 flex justify-center">
+                        <button
+                          onClick={() => setIsModalOpen(true)}
+                          className="bg-[#882CFB] hover:bg-[#7221D8] text-white font-semibold px-6 py-2.5 rounded-full transition shadow-sm cursor-pointer text-sm sm:text-base flex items-center gap-2"
+                        >
+                          Contact Advisor &rarr;
+                        </button>
+                      </div>
 
-                    <div className="flex justify-center md:justify-end">
-                      <img
-                        src="/assets/landingpage/girlwith-laptop.png"
-                        alt="Corporate Training"
-                        className="object-contain max-h-[160px] md:max-h-[190px] transform scale-105"
-                      />
+                      <div className="flex justify-center md:justify-end">
+                        <img
+                          src="/assets/landingpage/girlwith-laptop.png"
+                          alt="Corporate Training"
+                          className="object-contain max-h-[160px] md:max-h-[190px] transform scale-105"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Section: Eligibility & Prerequisites (Purple gradient with checkmarks) */}
               {hasEligibility && (
@@ -1177,13 +1344,13 @@ export default function DedicatedSyllabusPage({
                     <div className="relative grid grid-cols-1 md:grid-cols-[70%_30%] p-6 sm:p-8">
                       <div className="text-left text-white">
                         <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">
-                          {courseData?.allHeadline?.eligibility || "Eligibility & Prerequisites"}
+                          {validAllHeadline?.eligibility || "Eligibility & Prerequisites"}
                         </h2>
-                        {courseData?.courseDescription?.eligibility && (
+                        {eligibilityDescriptionHtml && (
                           <div
                             className="summernote-content2 prose max-w-none mb-4 text-white/90 text-sm leading-relaxed"
                             dangerouslySetInnerHTML={{
-                              __html: safeHtml(courseData.courseDescription.eligibility),
+                              __html: safeHtml(eligibilityDescriptionHtml),
                             }}
                           ></div>
                         )}
@@ -1206,393 +1373,399 @@ export default function DedicatedSyllabusPage({
               )}
 
               {/* Section: Company Logos Row */}
-              <div className="py-2 overflow-hidden">
-                <div className="relative flex w-max animate-scroll">
-                  {[
-                    "/assets/landingpage/institutelogo/daimler_logo.svg",
-                    "/assets/landingpage/institutelogo/adidas_logo.png",
-                    "/assets/landingpage/institutelogo/bajaj_logo.svg",
-                    "/assets/landingpage/institutelogo/rrtech_logo.svg",
-                    "/assets/landingpage/institutelogo/rhf_logo.png",
-                    "/assets/landingpage/institutelogo/hcl_logo.svg",
-                    "/assets/landingpage/institutelogo/rec_logo.svg",
-                    "/assets/landingpage/institutelogo/ey_logo.png",
-                    "/assets/landingpage/institutelogo/dxc_logo.svg",
-                    "/assets/landingpage/institutelogo/daimler_logo.svg",
-                    "/assets/landingpage/institutelogo/adidas_logo.png",
-                    "/assets/landingpage/institutelogo/bajaj_logo.svg",
-                    "/assets/landingpage/institutelogo/rrtech_logo.svg",
-                    "/assets/landingpage/institutelogo/rhf_logo.png",
-                  ].map((src, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white flex items-center justify-center p-2 border border-[#C1C2F9] hover:shadow-md rounded mx-3"
-                    >
-                      <div className="h-[70px] w-[130px] flex items-center justify-center">
-                        <img
-                          src={src}
-                          alt="Hiring Partner"
-                          className="max-h-full max-w-full object-contain"
-                        />
+              {hasHiringPartners && (
+                <div className="py-2 overflow-hidden">
+                  <div className="relative flex w-max animate-scroll">
+                    {[
+                      "/assets/landingpage/institutelogo/daimler_logo.svg",
+                      "/assets/landingpage/institutelogo/adidas_logo.png",
+                      "/assets/landingpage/institutelogo/bajaj_logo.svg",
+                      "/assets/landingpage/institutelogo/rrtech_logo.svg",
+                      "/assets/landingpage/institutelogo/rhf_logo.png",
+                      "/assets/landingpage/institutelogo/hcl_logo.svg",
+                      "/assets/landingpage/institutelogo/rec_logo.svg",
+                      "/assets/landingpage/institutelogo/ey_logo.png",
+                      "/assets/landingpage/institutelogo/dxc_logo.svg",
+                      "/assets/landingpage/institutelogo/daimler_logo.svg",
+                      "/assets/landingpage/institutelogo/adidas_logo.png",
+                      "/assets/landingpage/institutelogo/bajaj_logo.svg",
+                      "/assets/landingpage/institutelogo/rrtech_logo.svg",
+                      "/assets/landingpage/institutelogo/rhf_logo.png",
+                    ].map((src, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white flex items-center justify-center p-2 border border-[#C1C2F9] hover:shadow-md rounded mx-3"
+                      >
+                        <div className="h-[70px] w-[130px] flex items-center justify-center">
+                          <img
+                            src={src}
+                            alt="Hiring Partner"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Section: Stats Banner (Sky-blue brush 400k+ / 200+ / 100+) */}
-              <div className="py-2">
-                <div className="bg-[#2E318D] counter_bg p-4 text-[#2E318D] rounded-2xl">
-                  <div className="grid grid-cols-1 md:grid-cols-3 md:divide-x max-sm:divide-y divide-[#2E318D] gap-2 my-4">
-                    <div className="flex justify-center items-center">
-                      <div className="flex flex-col md:items-start items-center gap-2 py-2">
-                        <h2 className="md:text-4xl text-2xl font-bold">400k+</h2>
-                        <p className="text-sm sm:text-md text-left font-semibold">
-                          Career Transformations
-                        </p>
+              {hasStatsBanner && (
+                <div className="py-2">
+                  <div className="bg-[#2E318D] counter_bg p-4 text-[#2E318D] rounded-2xl">
+                    <div className="grid grid-cols-1 md:grid-cols-3 md:divide-x max-sm:divide-y divide-[#2E318D] gap-2 my-4">
+                      <div className="flex justify-center items-center">
+                        <div className="flex flex-col md:items-start items-center gap-2 py-2">
+                          <h2 className="md:text-4xl text-2xl font-bold">400k+</h2>
+                          <p className="text-sm sm:text-md text-left font-semibold">
+                            Career Transformations
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex justify-center items-center">
-                      <div className="flex flex-col md:items-start items-center gap-2 py-2">
-                        <h2 className="md:text-4xl text-2xl font-bold">200+</h2>
-                        <p className="text-sm sm:text-md text-left font-semibold">
-                          Workshops every month
-                        </p>
+                      <div className="flex justify-center items-center">
+                        <div className="flex flex-col md:items-start items-center gap-2 py-2">
+                          <h2 className="md:text-4xl text-2xl font-bold">200+</h2>
+                          <p className="text-sm sm:text-md text-left font-semibold">
+                            Workshops every month
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex justify-center items-center">
-                      <div className="flex flex-col md:items-start items-center gap-2 py-2">
-                        <h2 className="md:text-4xl text-2xl font-bold">100+</h2>
-                        <p className="text-sm sm:text-md text-left font-semibold">
-                          Countries and Counting
-                        </p>
+                      <div className="flex justify-center items-center">
+                        <div className="flex flex-col md:items-start items-center gap-2 py-2">
+                          <h2 className="md:text-4xl text-2xl font-bold">100+</h2>
+                          <p className="text-sm sm:text-md text-left font-semibold">
+                            Countries and Counting
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Section: Set Your Learning Calendar & Contact Form */}
-              <div id="contact" className="py-4 scroll-mt-36">
-                <div id="learning-calender" className="grid grid-cols-1 md:grid-cols-[42%_58%] gap-5">
-                  {/* Left Calendar Card */}
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3 text-start">
-                      Set Your Learning Calendar
-                    </h2>
+              {hasCalendarSection && (
+                <div id="contact" className="py-4 scroll-mt-36">
+                  <div id="learning-calender" className="grid grid-cols-1 md:grid-cols-[42%_58%] gap-5">
+                    {/* Left Calendar Card */}
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3 text-start">
+                        Set Your Learning Calendar
+                      </h2>
 
-                    <div className="bg-white border border-gray-300 p-5 rounded-2xl shadow-xs">
-                      {/* Month Header */}
-                      <div className="flex items-center justify-between mb-4">
-                        <button
-                          type="button"
-                          onClick={handlePrevCalMonth}
-                          className="text-gray-500 hover:text-black font-bold p-1 cursor-pointer"
-                        >
-                          &larr;
-                        </button>
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-800">
-                          {calendarDate.toLocaleString("default", {
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={handleNextCalMonth}
-                          className="text-gray-500 hover:text-black font-bold p-1 cursor-pointer"
-                        >
-                          &rarr;
-                        </button>
-                      </div>
+                      <div className="bg-white border border-gray-300 p-5 rounded-2xl shadow-xs">
+                        {/* Month Header */}
+                        <div className="flex items-center justify-between mb-4">
+                          <button
+                            type="button"
+                            onClick={handlePrevCalMonth}
+                            className="text-gray-500 hover:text-black font-bold p-1 cursor-pointer"
+                          >
+                            &larr;
+                          </button>
+                          <h3 className="font-semibold text-base sm:text-lg text-gray-800">
+                            {calendarDate.toLocaleString("default", {
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={handleNextCalMonth}
+                            className="text-gray-500 hover:text-black font-bold p-1 cursor-pointer"
+                          >
+                            &rarr;
+                          </button>
+                        </div>
 
-                      {/* Day Names */}
-                      <div className="grid grid-cols-7 text-center text-xs font-semibold text-gray-400 mb-2">
-                        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-                          <div key={d}>{d}</div>
-                        ))}
-                      </div>
-
-                      {/* Calendar Days */}
-                      <div className="grid grid-cols-7 gap-1 text-center">
-                        {[...Array(calFirstDay)].map((_, i) => (
-                          <div key={`empty-${i}`} />
-                        ))}
-                        {[...Array(calDaysInMonth)].map((_, i) => {
-                          const day = i + 1;
-                          const d = new Date(calYear, calMonth, day);
-                          d.setHours(0, 0, 0, 0);
-                          const isPast = d < calToday;
-                          const isSelected =
-                            selectedCalendarDate &&
-                            selectedCalendarDate.getTime() === d.getTime();
-                          return (
-                            <button
-                              key={day}
-                              type="button"
-                              disabled={isPast}
-                              onClick={() => handleCalDateSelect(day)}
-                              className={`py-1.5 text-xs sm:text-sm rounded-lg transition cursor-pointer ${
-                                isPast
-                                  ? "text-gray-300 cursor-not-allowed"
-                                  : "hover:bg-purple-50 text-gray-700"
-                              } ${isSelected ? "bg-[#4347CA] text-white font-bold" : ""}`}
-                            >
-                              {day}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Select Time */}
-                      <div className="mt-5">
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">
-                          Select Time
-                        </label>
-                        <select
-                          value={selectedCalendarTime}
-                          onChange={(e) => setSelectedCalendarTime(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#882CFB] cursor-pointer"
-                        >
-                          {calendarTimeSlots.map((time) => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
+                        {/* Day Names */}
+                        <div className="grid grid-cols-7 text-center text-xs font-semibold text-gray-400 mb-2">
+                          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                            <div key={d}>{d}</div>
                           ))}
-                        </select>
-                      </div>
+                        </div>
 
-                      <p className="text-xs text-gray-500 mt-2 font-medium">
-                        Selected: {selectedCalendarDate.toDateString()} at {selectedCalendarTime}
-                      </p>
+                        {/* Calendar Days */}
+                        <div className="grid grid-cols-7 gap-1 text-center">
+                          {[...Array(calFirstDay)].map((_, i) => (
+                            <div key={`empty-${i}`} />
+                          ))}
+                          {[...Array(calDaysInMonth)].map((_, i) => {
+                            const day = i + 1;
+                            const d = new Date(calYear, calMonth, day);
+                            d.setHours(0, 0, 0, 0);
+                            const isPast = d < calToday;
+                            const isSelected =
+                              selectedCalendarDate &&
+                              selectedCalendarDate.getTime() === d.getTime();
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                disabled={isPast}
+                                onClick={() => handleCalDateSelect(day)}
+                                className={`py-1.5 text-xs sm:text-sm rounded-lg transition cursor-pointer ${
+                                  isPast
+                                    ? "text-gray-300 cursor-not-allowed"
+                                    : "hover:bg-purple-50 text-gray-700"
+                                } ${isSelected ? "bg-[#4347CA] text-white font-bold" : ""}`}
+                              >
+                                {day}
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                      {/* 30-min Duration Card */}
-                      <div className="mt-5 p-3.5 bg-purple-50/50 border border-purple-100 rounded-xl space-y-1">
-                        <h4 className="text-xs font-bold text-gray-800">
-                          ScholarAcad Learning
-                        </h4>
-                        <hr className="border-purple-100 my-1" />
-                        <p className="text-xs font-semibold text-[#2E318D]">
-                          Duration: 30 Minutes
+                        {/* Select Time */}
+                        <div className="mt-5">
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">
+                            Select Time
+                          </label>
+                          <select
+                            value={selectedCalendarTime}
+                            onChange={(e) => setSelectedCalendarTime(e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#882CFB] cursor-pointer"
+                          >
+                            {calendarTimeSlots.map((time) => (
+                              <option key={time} value={time}>
+                                {time}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <p className="text-xs text-gray-500 mt-2 font-medium">
+                          Selected: {selectedCalendarDate.toDateString()} at {selectedCalendarTime}
                         </p>
-                        <p className="text-xs text-gray-600 leading-relaxed">
-                          Learn everything about your certification &mdash; including fees, syllabus, benefits, courseware, corporate enquiries, and custom schedules.
-                        </p>
+
+                        {/* 30-min Duration Card */}
+                        <div className="mt-5 p-3.5 bg-purple-50/50 border border-purple-100 rounded-xl space-y-1">
+                          <h4 className="text-xs font-bold text-gray-800">
+                            ScholarAcad Learning
+                          </h4>
+                          <hr className="border-purple-100 my-1" />
+                          <p className="text-xs font-semibold text-[#2E318D]">
+                            Duration: 30 Minutes
+                          </p>
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            Learn everything about your certification &mdash; including fees, syllabus, benefits, courseware, corporate enquiries, and custom schedules.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right Form Card (Dark styled matching screenshot 2 & 3) */}
-                  <div className="bg-black text-white p-5 sm:p-6 rounded-2xl shadow-md">
-                    <form onSubmit={handleCalSubmit} className="space-y-3.5">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-200 mb-1">
-                          Full Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="full_name"
-                          required
-                          value={calFormData.full_name}
-                          onChange={handleCalChange}
-                          className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Right Form Card (Dark styled matching screenshot 2 & 3) */}
+                    <div className="bg-black text-white p-5 sm:p-6 rounded-2xl shadow-md">
+                      <form onSubmit={handleCalSubmit} className="space-y-3.5">
                         <div>
                           <label className="block text-xs font-medium text-gray-200 mb-1">
-                            Contact Number
+                            Full Name <span className="text-red-500">*</span>
                           </label>
                           <input
                             type="text"
-                            name="contact_number"
-                            value={calFormData.contact_number}
-                            onChange={handleCalChange}
-                            className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-200 mb-1">
-                            Email ID <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="email"
-                            name="email"
+                            name="full_name"
                             required
-                            value={calFormData.email}
+                            value={calFormData.full_name}
                             onChange={handleCalChange}
                             className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
                           />
                         </div>
-                      </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-200 mb-1">
+                              Contact Number
+                            </label>
+                            <input
+                              type="text"
+                              name="contact_number"
+                              value={calFormData.contact_number}
+                              onChange={handleCalChange}
+                              className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-200 mb-1">
+                              Email ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="email"
+                              name="email"
+                              required
+                              value={calFormData.email}
+                              onChange={handleCalChange}
+                              className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-200 mb-1">
+                              Country <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              name="country"
+                              value={calFormData.country}
+                              onChange={handleCalChange}
+                              className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                            >
+                              <option value="India">India</option>
+                              <option value="United States">United States</option>
+                              <option value="United Kingdom">United Kingdom</option>
+                              <option value="Canada">Canada</option>
+                              <option value="Australia">Australia</option>
+                              <option value="Singapore">Singapore</option>
+                              <option value="United Arab Emirates">United Arab Emirates</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-200 mb-1">
+                              Course <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              name="course"
+                              value={calFormData.course}
+                              onChange={handleCalChange}
+                              className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                            >
+                              <option value={courseTitle}>{courseTitle}</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Enquiry For Radio */}
                         <div>
                           <label className="block text-xs font-medium text-gray-200 mb-1">
-                            Country <span className="text-red-500">*</span>
+                            Enquiry For <span className="text-red-500">*</span>
+                          </label>
+                          <div className="flex items-center gap-6 bg-white text-gray-900 px-3 py-2 rounded-lg text-sm">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="enquiry_for"
+                                value="Individual"
+                                checked={calFormData.enquiry_for === "Individual"}
+                                onChange={handleCalChange}
+                              />
+                              Individual
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="enquiry_for"
+                                value="Corporate"
+                                checked={calFormData.enquiry_for === "Corporate"}
+                                onChange={handleCalChange}
+                              />
+                              Corporate
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Training Delivery Mode */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-200 mb-1">
+                            Training Delivery Mode <span className="text-red-500">*</span>
                           </label>
                           <select
-                            name="country"
-                            value={calFormData.country}
+                            name="training_mode"
+                            value={calFormData.training_mode}
                             onChange={handleCalChange}
                             className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
                           >
-                            <option value="India">India</option>
-                            <option value="United States">United States</option>
-                            <option value="United Kingdom">United Kingdom</option>
-                            <option value="Canada">Canada</option>
-                            <option value="Australia">Australia</option>
-                            <option value="Singapore">Singapore</option>
-                            <option value="United Arab Emirates">United Arab Emirates</option>
+                            <option value="">Please Select</option>
+                            <option value="Live Virtual Online">Live Virtual Online</option>
+                            <option value="Corporate Classroom">Corporate Classroom</option>
+                            <option value="Self Paced">Self Paced</option>
                           </select>
                         </div>
+
+                        {/* Preferred Mode of Contact */}
                         <div>
                           <label className="block text-xs font-medium text-gray-200 mb-1">
-                            Course <span className="text-red-500">*</span>
+                            Select Your Preferred Mode of Contact <span className="text-red-500">*</span>
                           </label>
-                          <select
-                            name="course"
-                            value={calFormData.course}
+                          <div className="flex items-center gap-6 bg-white text-gray-900 px-3 py-2 rounded-lg text-sm">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="preferred_contact"
+                                value="Phone"
+                                checked={calFormData.preferred_contact === "Phone"}
+                                onChange={handleCalChange}
+                              />
+                              Phone
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="preferred_contact"
+                                value="Email"
+                                checked={calFormData.preferred_contact === "Email"}
+                                onChange={handleCalChange}
+                              />
+                              Email
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="preferred_contact"
+                                value="Both"
+                                checked={calFormData.preferred_contact === "Both"}
+                                onChange={handleCalChange}
+                              />
+                              Both
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Message */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-200 mb-1">
+                            Message <span className="text-red-500">*</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            name="message"
+                            value={calFormData.message}
                             onChange={handleCalChange}
-                            className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
-                          >
-                            <option value={courseTitle}>{courseTitle}</option>
-                          </select>
+                            placeholder="Your questions or custom requirements..."
+                            className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                          />
                         </div>
-                      </div>
 
-                      {/* Enquiry For Radio */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-200 mb-1">
-                          Enquiry For <span className="text-red-500">*</span>
-                        </label>
-                        <div className="flex items-center gap-6 bg-white text-gray-900 px-3 py-2 rounded-lg text-sm">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="enquiry_for"
-                              value="Individual"
-                              checked={calFormData.enquiry_for === "Individual"}
-                              onChange={handleCalChange}
-                            />
-                            Individual
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="enquiry_for"
-                              value="Corporate"
-                              checked={calFormData.enquiry_for === "Corporate"}
-                              onChange={handleCalChange}
-                            />
-                            Corporate
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="calTerms"
+                            name="terms"
+                            checked={calFormData.terms}
+                            onChange={handleCalChange}
+                            className="cursor-pointer"
+                          />
+                          <label htmlFor="calTerms" className="text-xs text-gray-300 cursor-pointer">
+                            I agree to the <span className="underline">Terms and Conditions</span>
                           </label>
                         </div>
-                      </div>
 
-                      {/* Training Delivery Mode */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-200 mb-1">
-                          Training Delivery Mode <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          name="training_mode"
-                          value={calFormData.training_mode}
-                          onChange={handleCalChange}
-                          className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none cursor-pointer"
+                        <button
+                          type="submit"
+                          className="w-full bg-[#882CFB] hover:bg-[#7221D8] text-white font-bold py-2.5 rounded-full transition shadow-md cursor-pointer text-sm sm:text-base mt-2"
                         >
-                          <option value="">Please Select</option>
-                          <option value="Live Virtual Online">Live Virtual Online</option>
-                          <option value="Corporate Classroom">Corporate Classroom</option>
-                          <option value="Self Paced">Self Paced</option>
-                        </select>
-                      </div>
-
-                      {/* Preferred Mode of Contact */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-200 mb-1">
-                          Select Your Preferred Mode of Contact <span className="text-red-500">*</span>
-                        </label>
-                        <div className="flex items-center gap-6 bg-white text-gray-900 px-3 py-2 rounded-lg text-sm">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="preferred_contact"
-                              value="Phone"
-                              checked={calFormData.preferred_contact === "Phone"}
-                              onChange={handleCalChange}
-                            />
-                            Phone
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="preferred_contact"
-                              value="Email"
-                              checked={calFormData.preferred_contact === "Email"}
-                              onChange={handleCalChange}
-                            />
-                            Email
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="preferred_contact"
-                              value="Both"
-                              checked={calFormData.preferred_contact === "Both"}
-                              onChange={handleCalChange}
-                            />
-                            Both
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Message */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-200 mb-1">
-                          Message <span className="text-red-500">*</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          name="message"
-                          value={calFormData.message}
-                          onChange={handleCalChange}
-                          placeholder="Your questions or custom requirements..."
-                          className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="calTerms"
-                          name="terms"
-                          checked={calFormData.terms}
-                          onChange={handleCalChange}
-                          className="cursor-pointer"
-                        />
-                        <label htmlFor="calTerms" className="text-xs text-gray-300 cursor-pointer">
-                          I agree to the <span className="underline">Terms and Conditions</span>
-                        </label>
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="w-full bg-[#882CFB] hover:bg-[#7221D8] text-white font-bold py-2.5 rounded-full transition shadow-md cursor-pointer text-sm sm:text-base mt-2"
-                      >
-                        Submit &rarr;
-                      </button>
-                    </form>
+                          Submit &rarr;
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Section: Roadmap / Certification Path (Circuit path with W1, W2 badges) */}
               {hasRoadmap && (
                 <div id="roadmap" className="py-4 scroll-mt-36">
                   <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-6 text-center">
-                    {courseData?.allHeadline?.path || "Roadmap to Certification"}
+                    {validAllHeadline?.path || "Roadmap to Certification"}
                   </h2>
                   <div className="roadmap">
                     {roadmapPoints.map((item, idx) => (
@@ -1640,79 +1813,80 @@ export default function DedicatedSyllabusPage({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                       <div>
                         <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3">
-                          {courseData?.allHeadline?.certifications || "Sample Certificate Preview"}
+                          {validAllHeadline?.certifications || "Sample Certificate Preview"}
                         </h2>
-                        <div
-                          className="summernote-content prose max-w-none text-gray-600 text-sm leading-relaxed"
-                          dangerouslySetInnerHTML={{
-                            __html: safeHtml(
-                              courseData?.certificationText?.description ||
-                              "Earn an industry-recognized certificate from ScholarAcad upon successful completion of your training."
-                            ),
-                          }}
-                        />
-                      </div>
-                      <div className="flex md:justify-end justify-center">
-                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 max-w-[85%] w-full flex justify-center items-center shadow-xs">
-                          <img
-                            src={
-                              courseData?.certificationImage?.image_path
-                                ? (courseData.certificationImage.image_path.startsWith("http")
-                                    ? courseData.certificationImage.image_path
-                                    : `${API_BASE_URL}/master/secure-documents?path=${courseData.certificationImage.image_path}`)
-                                : "/assets/images/new-dynamic-course/certificate.jpg"
-                            }
-                            alt="Certificate Preview"
-                            onError={(e) => {
-                              e.currentTarget.src = "/assets/images/new-dynamic-course/certificate.jpg";
+                        {certificateDescriptionHtml && (
+                          <div
+                            className="summernote-content prose max-w-none text-gray-600 text-sm leading-relaxed"
+                            dangerouslySetInnerHTML={{
+                              __html: safeHtml(certificateDescriptionHtml),
                             }}
-                            className="object-contain w-full h-auto rounded-lg shadow-sm"
                           />
-                        </div>
+                        )}
                       </div>
+                      {certificateImagePath && (
+                        <div className="flex md:justify-end justify-center">
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 max-w-[85%] w-full flex justify-center items-center shadow-xs">
+                            <img
+                              src={
+                                certificateImagePath.startsWith("http")
+                                  ? certificateImagePath
+                                  : `${API_BASE_URL}/master/secure-documents?path=${certificateImagePath}`
+                              }
+                              alt="Certificate Preview"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                              className="object-contain w-full h-auto rounded-lg shadow-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Section: Trending Courses Banner (Peach card) */}
-              <div className="py-2">
-                <div className="trending_coursesbg p-5 text-[#2E318D] rounded-2xl border border-gray-300">
-                  <div className="grid md:grid-cols-3 grid-cols-1 md:max-w-[95%] w-full m-auto items-center">
-                    <div className="flex justify-center md:justify-start">
-                      <img
-                        src="/assets/landingpage/menwith_laptop.png"
-                        alt="Trending Courses"
-                        className="object-contain max-h-[160px] md:max-h-[190px] transform scale-105"
-                      />
-                    </div>
-                    <div>
-                      <h2 className="font-bold text-2xl text-[#2E318D]">
-                        Trending Courses
-                      </h2>
-                      <ul className="list-disc pl-5 text-gray-700 mt-3 space-y-1 text-sm sm:text-base">
-                        <li>Impactful Instructor Led Training</li>
-                        <li>Wide range of Training dates.</li>
-                      </ul>
-                    </div>
-                    <div className="mt-4 md:mt-0 flex justify-center md:justify-end">
-                      <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-[#882CFB] hover:bg-[#7221D8] text-white font-semibold px-6 py-2.5 rounded-full transition shadow-sm cursor-pointer text-sm sm:text-base"
-                      >
-                        View Schedule &rarr;
-                      </button>
+              {hasTrendingCoursesBanner && (
+                <div className="py-2">
+                  <div className="trending_coursesbg p-5 text-[#2E318D] rounded-2xl border border-gray-300">
+                    <div className="grid md:grid-cols-3 grid-cols-1 md:max-w-[95%] w-full m-auto items-center">
+                      <div className="flex justify-center md:justify-start">
+                        <img
+                          src="/assets/landingpage/menwith_laptop.png"
+                          alt="Trending Courses"
+                          className="object-contain max-h-[160px] md:max-h-[190px] transform scale-105"
+                        />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-2xl text-[#2E318D]">
+                          Trending Courses
+                        </h2>
+                        <ul className="list-disc pl-5 text-gray-700 mt-3 space-y-1 text-sm sm:text-base">
+                          <li>Impactful Instructor Led Training</li>
+                          <li>Wide range of Training dates.</li>
+                        </ul>
+                      </div>
+                      <div className="mt-4 md:mt-0 flex justify-center md:justify-end">
+                        <button
+                          onClick={() => setIsModalOpen(true)}
+                          className="bg-[#882CFB] hover:bg-[#7221D8] text-white font-semibold px-6 py-2.5 rounded-full transition shadow-sm cursor-pointer text-sm sm:text-base"
+                        >
+                          View Schedule &rarr;
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Section: Learning Objectives (01, 02 cards - DYNAMIC ONLY, no "NA" cards) */}
               {learningObjectivesList.length > 0 && (
                 <div className="py-4">
                   <div className="text-center mb-6">
                     <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 max-w-xl mx-auto">
-                      {courseData?.allHeadline?.old_learning_objectives ||
+                      {validAllHeadline?.old_learning_objectives ||
                         "Learning Objective - Skills & knowledge you will get from this course"}
                     </h2>
                   </div>
@@ -1740,44 +1914,46 @@ export default function DedicatedSyllabusPage({
               )}
 
               {/* Section 6: FAQs Section */}
-              <div id="faqs" className="bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200/90 scroll-mt-36">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-5">
-                  Frequently Asked Questions
-                </h2>
-                <div className="space-y-3">
-                  {faqs.map((faq, idx) => (
-                    <div
-                      key={idx}
-                      className="border border-gray-200 rounded-xl overflow-hidden transition"
-                    >
-                      <button
-                        onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
-                        className="w-full flex items-center justify-between p-4 text-left font-semibold text-gray-800 hover:bg-gray-50 transition text-sm cursor-pointer"
+              {faqs.length > 0 && (
+                <div id="faqs" className="bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200/90 scroll-mt-36">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-5">
+                    {validAllHeadline?.frequently_asked_questions || "Frequently Asked Questions"}
+                  </h2>
+                  <div className="space-y-3">
+                    {faqs.map((faq, idx) => (
+                      <div
+                        key={idx}
+                        className="border border-gray-200 rounded-xl overflow-hidden transition"
                       >
-                        <span>{faq?.question || faq?.title}</span>
-                        <div
-                          className={`w-6 h-6 flex items-center justify-center rounded-md shrink-0 ml-2 transition-all ${
-                            openFaqIndex === idx
-                              ? "bg-[#882CFB] text-white"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
+                        <button
+                          onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
+                          className="w-full flex items-center justify-between p-4 text-left font-semibold text-gray-800 hover:bg-gray-50 transition text-sm cursor-pointer"
                         >
-                          {openFaqIndex === idx ? (
-                            <FaMinus className="text-xs" />
-                          ) : (
-                            <FaPlus className="text-xs" />
-                          )}
-                        </div>
-                      </button>
-                      {openFaqIndex === idx && (
-                        <div className="p-4 bg-slate-50 text-xs sm:text-sm text-gray-600 border-t border-gray-100 leading-relaxed">
-                          {faq?.answer || faq?.description}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                          <span>{faq?.question || faq?.title}</span>
+                          <div
+                            className={`w-6 h-6 flex items-center justify-center rounded-md shrink-0 ml-2 transition-all ${
+                              openFaqIndex === idx
+                                ? "bg-[#882CFB] text-white"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {openFaqIndex === idx ? (
+                              <FaMinus className="text-xs" />
+                            ) : (
+                              <FaPlus className="text-xs" />
+                            )}
+                          </div>
+                        </button>
+                        {openFaqIndex === idx && (
+                          <div className="p-4 bg-slate-50 text-xs sm:text-sm text-gray-600 border-t border-gray-100 leading-relaxed">
+                            {faq?.answer || faq?.description}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </section>

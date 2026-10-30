@@ -55,8 +55,11 @@ import {
 } from "react-icons/fi";
 import { HiOutlineEmojiSad, HiOutlineVideoCamera } from "react-icons/hi";
 import { IoBookOutline } from "react-icons/io5";
-import Head from "next/head";
-import { DynamicSEO, getCleanCanonicalUrl, generateCourseSchema } from "@/lib/seoHelper";
+import {
+  DynamicSEO,
+  generateCourseSchema,
+  generateSupportPageSchema,
+} from "@/lib/seoHelper";
 import {
   BarChart,
   Bar,
@@ -147,6 +150,72 @@ const normalizeImageUrl = (path, fallback = DEFAULT_COURSE_FALLBACK) => {
   return getCourseImageUrl(path, fallback);
 };
 
+const sanitizeDynamicCourseData = (rawData) => {
+  if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
+    return rawData;
+  }
+  const targetCourseId =
+    rawData?.course?.id ||
+    rawData?.course_id ||
+    rawData?.support_page?.course_id ||
+    rawData?.dynamicCourseHeading?.course_id ||
+    rawData?.allHeadline?.course_id ||
+    rawData?.courseOverview?.course_id ||
+    rawData?.whatYouWillLearn?.course_id ||
+    rawData?.courseHighlights?.course_id ||
+    rawData?.images?.course_id ||
+    null;
+
+  const belongsToCourse = (rec) => {
+    if (!rec || typeof rec !== "object") return false;
+    if (rec.course_id !== undefined && rec.course_id !== null) {
+      if (!targetCourseId) return false;
+      if (Number(rec.course_id) !== Number(targetCourseId)) return false;
+    }
+    return true;
+  };
+
+  const cleaned = { ...rawData };
+  const courseScopedObjectKeys = [
+    "dynamicCourseHeading",
+    "courseHighlights",
+    "allHeadline",
+    "keyfeatures",
+    "courseWhyScholarAcad",
+    "whatYouWillLearn",
+    "whatyoulearn",
+    "courseOverview",
+    "courseDescription",
+    "newExamstructure",
+    "certificateEligibility",
+    "certificationPath",
+    "certificationImage",
+    "certificationText",
+    "coursePDF",
+    "courseBenefits",
+    "images",
+    "courseImage",
+    "ratings",
+  ];
+  for (const key of courseScopedObjectKeys) {
+    if (cleaned[key] && !Array.isArray(cleaned[key]) && !belongsToCourse(cleaned[key])) {
+      cleaned[key] = null;
+    }
+  }
+  const courseScopedArrayKeys = [
+    "CourseFaqs",
+    "courseCurriculumFAQ",
+    "courseSalaries",
+    "coursePlan",
+    "youtubeVideos",
+  ];
+  for (const key of courseScopedArrayKeys) {
+    if (Array.isArray(cleaned[key])) {
+      cleaned[key] = cleaned[key].filter((item) => belongsToCourse(item));
+    }
+  }
+  return cleaned;
+};
 
 function DynamicPage({
   courseData: initialCourseData = null,
@@ -483,7 +552,11 @@ function DynamicPage({
     setShowModal(false);
   };
 
-  const [courseData, setCourseData] = useState(initialCourseData || null);
+  const [rawCourseData, setCourseData] = useState(initialCourseData || null);
+  const courseData = useMemo(
+    () => sanitizeDynamicCourseData(rawCourseData),
+    [rawCourseData]
+  );
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -677,12 +750,20 @@ function DynamicPage({
               if (dynRes.ok) {
                 const dynJson = await dynRes.json();
                 if (dynJson?.data) {
+                  const supportSchema = data.data.schema;
+                  const supportCourse = data.data.course;
                   Object.assign(data.data, dynJson.data);
+                  if (supportCourse) {
+                    data.data.course = supportCourse;
+                  }
+                  if (supportSchema) {
+                    data.data.schema = supportSchema;
+                  }
                 }
               }
             } catch (e) {}
 
-            setCourseData(data?.data);
+            setCourseData(sanitizeDynamicCourseData(data?.data));
             setError(null);
           }
         } else if (isNotes) {
@@ -711,7 +792,7 @@ function DynamicPage({
             setError("No data found for the given information.");
             setCourseData(null);
           } else {
-            setCourseData(data?.data);
+            setCourseData(sanitizeDynamicCourseData(data?.data));
             setError(null);
           }
         } else {
@@ -739,7 +820,16 @@ function DynamicPage({
             setError("No data found for the given information.");
             setCourseData(null);
           } else {
-            setCourseData(data?.data);
+            setCourseData((prev) =>
+              sanitizeDynamicCourseData({
+                ...(data?.data || {}),
+                course: data?.data?.course || prev?.course || initialCourseData?.course || null,
+                header_image: data?.data?.header_image || prev?.header_image || initialCourseData?.header_image || null,
+                course_title: data?.data?.course_title || prev?.course_title || initialCourseData?.course_title || null,
+                short_description: data?.data?.short_description || prev?.short_description || initialCourseData?.short_description || null,
+                schema: data?.data?.schema || prev?.schema || initialCourseData?.schema || null,
+              })
+            );
             setError(null);
           }
         }
@@ -2819,35 +2909,135 @@ function DynamicPage({
     );
   }
 
-  const courseHeadingData = courseData?.dynamicCourseHeading || courseData?.courseHeading || {};
-  const courseTitle = courseHeadingData?.meta_title || courseHeadingData?.heading || courseHeadingData?.title || (url_title ? url_title.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : "Course Details");
-  const courseDescription = courseHeadingData?.metaDescription || courseHeadingData?.meta_description || courseHeadingData?.description || courseData?.courseDescription?.description || "";
-  const courseKeywords = courseHeadingData?.meta_keywords || null;
+  const courseHeadingData =
+    courseData?.dynamicCourseHeading ||
+    courseData?.courseHeading ||
+    {};
 
-  const firstSchedule = Array.isArray(courseData?.courseSchedule) && courseData.courseSchedule.length > 0 ? courseData.courseSchedule[0] : null;
-  const coursePricing = firstSchedule ? {
-    amount: firstSchedule?.discounted_price || firstSchedule?.fee_amount || 0,
-    currency: firstSchedule?.fee_currency || "INR"
-  } : null;
+  const courseTitle =
+    courseHeadingData?.meta_title ||
+    courseHeadingData?.heading ||
+    courseHeadingData?.title ||
+    courseData?.course_title ||
+    (url_title
+      ? url_title
+          .split("-")
+          .map(
+            (word) =>
+              word.charAt(0).toUpperCase() + word.slice(1)
+          )
+          .join(" ")
+      : "Course Details");
+
+  const courseDescription =
+    courseHeadingData?.metaDescription ||
+    courseHeadingData?.meta_description ||
+    courseHeadingData?.description ||
+    courseData?.courseDescription?.description ||
+    courseData?.short_description ||
+    courseData?.overview ||
+    "";
+
+  const courseKeywords =
+    courseHeadingData?.meta_keywords ||
+    courseData?.meta_keywords ||
+    null;
+
+  const firstSchedule =
+    Array.isArray(courseData?.courseSchedule) &&
+    courseData.courseSchedule.length > 0
+      ? courseData.courseSchedule[0]
+      : null;
+
+  const coursePricing = useMemo(() => {
+    if (!firstSchedule) return null;
+    const baseFee = parseFloat(
+      firstSchedule?.course_fees ??
+        firstSchedule?.discounted_price ??
+        firstSchedule?.fee_amount ??
+        0
+    );
+    const discountPct = parseFloat(firstSchedule?.discount_amt ?? 0);
+    const calculatedAmount =
+      baseFee > 0 && discountPct > 0 && discountPct < 100
+        ? Math.round(baseFee * (1 - discountPct / 100))
+        : Math.round(baseFee || 0);
+
+    return {
+      amount: calculatedAmount,
+      currency:
+        firstSchedule?.currency_type ||
+        firstSchedule?.fee_currency ||
+        "INR",
+    };
+  }, [firstSchedule]);
+
+  const courseImagePath =
+    courseHeadingData?.image ||
+    courseData?.courseHeading?.image ||
+    courseData?.header_image ||
+    courseData?.course_image ||
+    null;
+
+  const courseImageUrl = courseImagePath
+    ? /^https?:\/\//i.test(courseImagePath)
+      ? courseImagePath
+      : `${API_BASE_URL.replace(/\/+$/, "")}/${String(
+          courseImagePath
+        ).replace(/^\/+/, "")}`
+    : null;
 
   const courseSchema = useMemo(() => {
-    if (!courseData) return null;
-    return generateCourseSchema({
-      courseName: courseHeadingData?.heading || courseHeadingData?.title || courseTitle,
-      courseDescription: courseDescription,
-      courseUrl: router.asPath,
-      imageUrl: courseData?.courseHeading?.image ? `${API_BASE_URL}/${courseData.courseHeading.image}` : null,
-      breadcrumbs: [
-        { name: "Home", url: "/" },
-        { name: "All Courses", url: "/all-courses" },
-        { name: courseHeadingData?.heading || courseHeadingData?.title || courseTitle, url: `/${url_title || ""}` }
-      ],
-      faqs: courseData?.courseCurriculumFAQ || faq || [],
-      reviews: testimonialList || [],
-      ratings: courseData?.ratings?.[0] || null,
-      pricing: coursePricing,
-    });
-  }, [courseData, courseHeadingData, courseTitle, courseDescription, router.asPath, faq, testimonialList, coursePricing, url_title]);
+    if (!courseData && !url_title) return null;
+
+    const mergedFaqs = [
+      ...(Array.isArray(courseData?.CourseFaqs) ? courseData.CourseFaqs : []),
+      ...(Array.isArray(courseData?.courseCurriculumFAQ)
+        ? courseData.courseCurriculumFAQ
+        : []),
+      ...(Array.isArray(faq) ? faq : []),
+    ];
+
+    return (
+      courseData?.schema ||
+      courseData?.course?.schema ||
+      generateCourseSchema({
+        courseName: courseTitle,
+        courseDescription,
+        courseUrl: router.asPath || `/${url_title || ""}`,
+        imageUrl: courseImageUrl,
+        breadcrumbs: [
+          { name: "Home", url: "/" },
+          { name: "All Courses", url: "/all-courses" },
+          {
+            name: courseTitle,
+            url: `/${url_title || ""}`,
+          },
+        ],
+        faqs: mergedFaqs,
+        reviews: Array.isArray(testimonialList) ? testimonialList : [],
+        ratings: courseData?.ratings?.[0] || courseData?.ratings || null,
+        pricing: coursePricing,
+        schedules: Array.isArray(courseData?.courseSchedule)
+          ? courseData.courseSchedule
+          : [],
+        courseCode: url_title,
+        keywords: courseKeywords,
+        courseData,
+      })
+    );
+  }, [
+    courseData,
+    url_title,
+    router.asPath,
+    courseTitle,
+    courseDescription,
+    courseImageUrl,
+    faq,
+    testimonialList,
+    coursePricing,
+    courseKeywords,
+  ]);
 
   if (isQuestionsScreen) {
     return (
@@ -2921,13 +3111,15 @@ function DynamicPage({
   return (
     <>
       <DynamicSEO
-        title={courseTitle ? `${courseTitle} | ScholarAcad` : "ScholarAcad - Best Certification Training Provider"}
-        description={courseDescription || "Master in-demand industry skills with expert-led certification training courses."}
-        canonicalUrl={getCleanCanonicalUrl(router.asPath)}
+        title={`${courseTitle} | ScholarAcad`}
+        description={
+          courseDescription ||
+          `Learn ${courseTitle} with ScholarAcad professional certification training.`
+        }
+        canonicalUrl={router.asPath}
         keywords={courseKeywords}
-        ogTitle={courseTitle}
-        ogDescription={courseDescription}
-        ogUrl={getCleanCanonicalUrl(router.asPath)}
+        ogType="website"
+        ogImage={courseImageUrl || undefined}
         schemaData={courseSchema}
         robots="index, follow"
       />
@@ -3050,41 +3242,64 @@ function DynamicPage({
                 </button>
               )}
 
-              <button
-                onClick={() => scrollToSection("Key Features")}
-                className={`px-6 py-3 border-b-2 transition cursor-pointer 
+              {Boolean(
+                courseData?.keyfeatures?.record_one ||
+                  courseData?.keyfeatures?.record_two ||
+                  courseData?.keyfeatures?.record_three ||
+                  courseData?.keyfeatures?.record_four ||
+                  courseData?.keyfeatures?.record_five ||
+                  courseData?.keyfeatures?.record_six ||
+                  courseData?.keyfeatures?.read_more
+              ) && (
+                <button
+                  onClick={() => scrollToSection("Key Features")}
+                  className={`px-6 py-3 border-b-2 transition cursor-pointer 
               ${activeId === "Key Features"
-                    ? "border-purple-600 text-purple-600 font-semibold text-xs"
-                    : "border-transparent hover:text-purple-600 text-xs"
-                  }
+                      ? "border-purple-600 text-purple-600 font-semibold text-xs"
+                      : "border-transparent hover:text-purple-600 text-xs"
+                    }
             `}
-              >
-                Key Features
-              </button>
+                >
+                  Key Features
+                </button>
+              )}
 
-              <button
-                onClick={() => scrollToSection("Why Choose Us")}
-                className={`px-6 py-3 border-b-2 transition cursor-pointer 
+              {Boolean(
+                whychooseusdata1?.heading ||
+                  whychooseusdata2?.heading ||
+                  whychooseusdata3?.heading ||
+                  whychooseusdata4?.heading
+              ) && (
+                <button
+                  onClick={() => scrollToSection("Why Choose Us")}
+                  className={`px-6 py-3 border-b-2 transition cursor-pointer 
               ${activeId === "Why Choose Us"
-                    ? "border-purple-600 text-purple-600 font-semibold text-xs"
-                    : "border-transparent hover:text-purple-600 text-xs"
-                  }
+                      ? "border-purple-600 text-purple-600 font-semibold text-xs"
+                      : "border-transparent hover:text-purple-600 text-xs"
+                    }
             `}
-              >
-                Why Choose Us
-              </button>
+                >
+                  Why Choose Us
+                </button>
+              )}
 
-              <button
-                onClick={() => scrollToSection("What You’ll Learn")}
-                className={`px-6 py-3 border-b-2 transition cursor-pointer 
+              {Boolean(
+                courseData?.allHeadline?.new_learning_objectives &&
+                  (courseData?.whatyoulearn?.description ||
+                    (Array.isArray(pointers) && pointers.length > 0))
+              ) && (
+                <button
+                  onClick={() => scrollToSection("What You’ll Learn")}
+                  className={`px-6 py-3 border-b-2 transition cursor-pointer 
               ${activeId === "What You’ll Learn"
-                    ? "border-purple-600 text-purple-600 font-semibold text-xs"
-                    : "border-transparent hover:text-purple-600 text-xs"
-                  }
+                      ? "border-purple-600 text-purple-600 font-semibold text-xs"
+                      : "border-transparent hover:text-purple-600 text-xs"
+                    }
             `}
-              >
-                What You’ll Learn
-              </button>
+                >
+                  What You’ll Learn
+                </button>
+              )}
               {Array.isArray(courseData?.coursePrice) &&
                 courseData.coursePrice.length > 0 && (
                   <button
@@ -4223,130 +4438,111 @@ function DynamicPage({
                   </div>
                 </section> */}
 
-                <div className="max-sm:p-4 py-5    ">
-                  <div className="bg-[#F7F3FF] rounded-md border border-gray-300 p-3">
-                    <div className="mt-1">
-                      {courseData?.courseCurriculumFAQ?.length > 0 ? (
-                        <>
-                          {/* <RiGraduationCapFill className="text-[#2E318D] text-4xl rotate-350 ml-[-15px] mb-[-5px]" /> */}
-                          <h2 className="heading text-center md:max-w-[80%] m-auto">
-                            {courseData?.allHeadline?.curriculum}
-                          </h2>
-                        </>
-                      ) : (
-                        <>
-                          <RiGraduationCapFill className="text-[#2E318D] text-4xl rotate-350 ml-[-15px] mb-[-5px]" />
-                          <h2 className="font-bold text-xl text-[#2F328F]">
-                            Curriculum
-                          </h2>
-                        </>
-                      )}
-                    </div>
-                    <div className=" my-2">
-                      <div className="flex justify-between items-center ">
-                        <div
-                          className="summernote-content"
-                          dangerouslySetInnerHTML={{
-                            __html: courseData?.courseDescription?.curriculum,
-                          }}
-                        />
-                        {/* {courseData?.coursePDF && (
-                          <div className="flex justify-end items-end">
-                            <a
-                              href={`${API_BASE_URL}/assets/courseCurriculum/${courseData?.coursePDF.curriculum_pdf_name}.pdf`}
-                              download
-                              className="inline-block"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <button
-                                title="Download Curriculum Pdf"
-                                className="bg-[#2E318D] hover:bg-[#4347ca] cursor-pointer text-white px-6 py-2 rounded-full flex items-center gap-1"
-                              >
-                                <RiFolderDownloadLine />
-                                Download Curriculum
-                              </button>
-                            </a>
-                             <FormModal
-                              buttonText="Download Curriculum"
-                              modalType="register"
-                            />
-                          </div>
-                        )} */}
-                        {courseData?.coursePDF && (
-                          <div className="flex justify-end items-end">
-                            {!allowDownload && (
-                              <FormModal
-                                buttonText="Download Curriculum"
-                                modalType="register"
-                                service="Download Curriculum"
-                              />
-                            )}
-
-                            {allowDownload && (
-                              <button
-                                className="bg-[#882CFB] text-white px-6 py-2 rounded-full"
-                                disabled
-                              >
-                                Downloading...
-                              </button>
-                            )}
-                          </div>
+                {(courseData?.courseCurriculumFAQ?.length > 0 ||
+                  (courseData?.courseDescription?.curriculum &&
+                    courseData.courseDescription.curriculum.replace(/<[^>]*>/g, "").trim() !== "") ||
+                  courseData?.coursePDF) && (
+                  <div className="max-sm:p-4 py-5    ">
+                    <div className="bg-[#F7F3FF] rounded-md border border-gray-300 p-3">
+                      <div className="mt-1">
+                        {courseData?.courseCurriculumFAQ?.length > 0 ? (
+                          <>
+                            <h2 className="heading text-center md:max-w-[80%] m-auto">
+                              {courseData?.allHeadline?.curriculum}
+                            </h2>
+                          </>
+                        ) : (
+                          <>
+                            <RiGraduationCapFill className="text-[#2E318D] text-4xl rotate-350 ml-[-15px] mb-[-5px]" />
+                            <h2 className="font-bold text-xl text-[#2F328F]">
+                              {courseData?.allHeadline?.curriculum || "Curriculum"}
+                            </h2>
+                          </>
                         )}
                       </div>
-                    </div>
+                      <div className=" my-2">
+                        <div className="flex justify-between items-center ">
+                          <div
+                            className="summernote-content"
+                            dangerouslySetInnerHTML={{
+                              __html: courseData?.courseDescription?.curriculum,
+                            }}
+                          />
+                          {courseData?.coursePDF && (
+                            <div className="flex justify-end items-end">
+                              {!allowDownload && (
+                                <FormModal
+                                  buttonText="Download Curriculum"
+                                  modalType="register"
+                                  service="Download Curriculum"
+                                />
+                              )}
 
-                    <div className="w-full grid grid-cols-1  gap-2 mt-4">
-                      {courseData?.courseCurriculumFAQ?.map((faq, i) => (
-                        <div
-                          key={i}
-                          className={`rounded-lg  border border-gray-300 transition-all duration-500 ease-in-out self-start ${openIndex === i
-                            ? "bg-white text-gray-800"
-                            : "bg-white text-gray-500"
-                            }`}
-                        >
-                          <button
-                            title={faq?.title || "NA"}
-                            onClick={() => toggleFAQ(i)}
-                            className="w-full cursor-pointer flex justify-between items-center px-6 py-3 text-left font-medium text-md focus:outline-none border-b border-gray-200"
-                          >
-                            <span>
-                              {faq?.title?.length > 150
-                                ? faq.title.slice(0, 150) + "..."
-                                : faq?.title}
-                            </span>
-
-                            <div
-                              className={`w-5 h-5 flex items-center justify-center rounded-md transition-all duration-300 ${openIndex === i
-                                ? "bg-gray-200 text-black rotate-180"
-                                : "bg-[#9B7CFF] text-white"
-                                }`}
-                            >
-                              {openIndex === i ? (
-                                <FaMinus className="text-xs" />
-                              ) : (
-                                <FaPlus className="text-xs" />
+                              {allowDownload && (
+                                <button
+                                  className="bg-[#882CFB] text-white px-6 py-2 rounded-full"
+                                  disabled
+                                >
+                                  Downloading...
+                                </button>
                               )}
                             </div>
-                          </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="w-full grid grid-cols-1  gap-2 mt-4">
+                        {courseData?.courseCurriculumFAQ?.map((faq, i) => (
                           <div
-                            className={`overflow-hidden transition-all duration-500 ease-in-out ${openIndex === i
-                              ? "max-h-[400px] overflow-y-auto opacity-100 px-6 "
-                              : "max-h-0 opacity-0 px-6"
+                            key={i}
+                            className={`rounded-lg  border border-gray-300 transition-all duration-500 ease-in-out self-start ${openIndex === i
+                              ? "bg-white text-gray-800"
+                              : "bg-white text-gray-500"
                               }`}
                           >
+                            <button
+                              title={faq?.title || "NA"}
+                              onClick={() => toggleFAQ(i)}
+                              className="w-full cursor-pointer flex justify-between items-center px-6 py-3 text-left font-medium text-md focus:outline-none border-b border-gray-200"
+                            >
+                              <span>
+                                {faq?.title?.length > 150
+                                  ? faq.title.slice(0, 150) + "..."
+                                  : faq?.title}
+                              </span>
+
+                              <div
+                                className={`w-5 h-5 flex items-center justify-center rounded-md transition-all duration-300 ${openIndex === i
+                                  ? "bg-gray-200 text-black rotate-180"
+                                  : "bg-[#9B7CFF] text-white"
+                                  }`}
+                              >
+                                {openIndex === i ? (
+                                  <FaMinus className="text-xs" />
+                                ) : (
+                                  <FaPlus className="text-xs" />
+                                )}
+                              </div>
+                            </button>
                             <div
-                              className="summernote-content"
-                              dangerouslySetInnerHTML={{
-                                __html: faq?.description,
-                              }}
-                            />
+                              className={`overflow-hidden transition-all duration-500 ease-in-out ${openIndex === i
+                                ? "max-h-[400px] overflow-y-auto opacity-100 px-6 "
+                                : "max-h-0 opacity-0 px-6"
+                                }`}
+                            >
+                              <div
+                                className="summernote-content"
+                                dangerouslySetInnerHTML={{
+                                  __html: faq?.description,
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Corporate Training Section */}
                 <div className="py-5 max-sm:p-3 mt-5 ">
@@ -4403,12 +4599,10 @@ function DynamicPage({
                             {expanded ? (
                               <>
                                 Read Less{" "}
-                                {/* <FaChevronUp className="text-sm cursor-pointer" /> */}
                               </>
                             ) : (
                               <>
                                 Read More{" "}
-                                {/* <FaChevronDown className="text-sm cursor-pointer" /> */}
                               </>
                             )}
                           </button>
@@ -4421,51 +4615,55 @@ function DynamicPage({
                 )}
 
                 {/* Certification Eligibility New Section */}
-                <section className="py-5 max-sm:p-3">
-                  <div className="relative rounded-md overflow-hidden ">
-                    <div
-                      className="absolute inset-0 bg-cover bg-center object-contain"
-                      style={{
-                        backgroundImage:
-                          "url('/assets/landingpage/certificate_bg.png')",
-                      }}
-                    ></div>
-                    {/* <div className="absolute top-0 bottom-0 left-0 w-[85%] bg-gradient-to-r from-indigo-800 to-indigo-700/10"></div> */}
-                    <div className="relative grid grid-cols-1 md:grid-cols-[70%_30%] p-5">
-                      <div className="text-left text-white">
-                        {courseData?.allHeadline?.eligibility && (
-                          <h2 className="heading_white ">
-                            {courseData.allHeadline.eligibility}
-                          </h2>
-                        )}
-                        {courseData?.courseDescription?.eligibility && (
-                          <div
-                            className="summernote-content2 prose max-w-none mt-2 force-text-color"
-                            dangerouslySetInnerHTML={{
-                              __html: courseData.courseDescription.eligibility,
-                            }}
-                          ></div>
-                        )}
+                {(courseData?.allHeadline?.eligibility ||
+                  (courseData?.courseDescription?.eligibility &&
+                    courseData.courseDescription.eligibility.replace(/<[^>]*>/g, "").trim() !== "") ||
+                  (Array.isArray(certificatelist) && certificatelist.length > 0)) && (
+                  <section className="py-5 max-sm:p-3">
+                    <div className="relative rounded-md overflow-hidden ">
+                      <div
+                        className="absolute inset-0 bg-cover bg-center object-contain"
+                        style={{
+                          backgroundImage:
+                            "url('/assets/landingpage/certificate_bg.png')",
+                        }}
+                      ></div>
+                      <div className="relative grid grid-cols-1 md:grid-cols-[70%_30%] p-5">
+                        <div className="text-left text-white">
+                          {courseData?.allHeadline?.eligibility && (
+                            <h2 className="heading_white ">
+                              {courseData.allHeadline.eligibility}
+                            </h2>
+                          )}
+                          {courseData?.courseDescription?.eligibility && (
+                            <div
+                              className="summernote-content2 prose max-w-none mt-2 force-text-color"
+                              dangerouslySetInnerHTML={{
+                                __html: courseData.courseDescription.eligibility,
+                              }}
+                            ></div>
+                          )}
 
-                        <div className=" mt-2">
-                          {Array?.isArray(certificatelist) &&
-                            certificatelist?.map((point, i) => (
-                              <div
-                                key={i}
-                                className="flex gap-3 items-start mb-3"
-                              >
-                                <IoCheckmarkCircleSharp className="text-white text-lg shrink-0 mt-1" />
-                                <p className="text-white text-[15px]">
-                                  {point}
-                                </p>
-                              </div>
-                            ))}
+                          <div className=" mt-2">
+                            {Array?.isArray(certificatelist) &&
+                              certificatelist?.map((point, i) => (
+                                <div
+                                  key={i}
+                                  className="flex gap-3 items-start mb-3"
+                                >
+                                  <IoCheckmarkCircleSharp className="text-white text-lg shrink-0 mt-1" />
+                                  <p className="text-white text-[15px]">
+                                    {point}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
                         </div>
+                        <div></div>
                       </div>
-                      <div></div>
                     </div>
-                  </div>
-                </section>
+                  </section>
+                )}
 
                 <section>
                   {/* Graph Card Section */}
@@ -5959,41 +6157,45 @@ function DynamicPage({
                 )}
 
                 {/* Certificate Section */}
-                <section className=" max-sm:p-3 py-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-sm:gap-10 item-start justify-center">
-                    <div>
-                      <h2 className="heading md:max-w-[90%] w-full  ">
-                        {courseData?.allHeadline?.certifications}
-                      </h2>
-                      <div
-                        className="summernote-content prose max-w-none  "
-                        dangerouslySetInnerHTML={{
-                          __html:
-                            courseData?.certificationText?.description ||
-                            "No Details Available",
-                        }}
-                      ></div>
-                    </div>
-                    <div className="flex md:justify-end justify-center ">
-                      <div className="bg-gray-50 border-1 border-gray-200 rounded-lg  p-3 max-w-[70%]  flex justify-center item-center  w-full  ">
-                        <img
-                          src={
-                            courseData?.certificationImage?.image_path
-                              ? normalizeImageUrl(courseData.certificationImage.image_path, "/assets/images/new-dynamic-course/certificate.jpg")
-                              : courseData?.courseImage?.banner_image_path
-                              ? normalizeImageUrl(courseData.courseImage.banner_image_path, "/assets/images/new-dynamic-course/certificate.jpg")
-                              : "/assets/images/new-dynamic-course/certificate.jpg"
-                          }
-                          alt="Certificate"
-                          onError={(e) => {
-                            e.currentTarget.src = "/assets/images/new-dynamic-course/certificate.jpg";
-                          }}
-                          className="object-contain w-full h-auto rounded-md shadow-sm"
-                        />
+                {(courseData?.allHeadline?.certifications ||
+                  (courseData?.certificationText?.description &&
+                    courseData.certificationText.description.replace(/<[^>]*>/g, "").trim() !== "") ||
+                  courseData?.certificationImage?.image_path) && (
+                  <section className=" max-sm:p-3 py-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-sm:gap-10 item-start justify-center">
+                      <div>
+                        <h2 className="heading md:max-w-[90%] w-full  ">
+                          {courseData?.allHeadline?.certifications}
+                        </h2>
+                        {courseData?.certificationText?.description && (
+                          <div
+                            className="summernote-content prose max-w-none  "
+                            dangerouslySetInnerHTML={{
+                              __html: courseData.certificationText.description,
+                            }}
+                          ></div>
+                        )}
                       </div>
+                      {courseData?.certificationImage?.image_path && (
+                        <div className="flex md:justify-end justify-center ">
+                          <div className="bg-gray-50 border-1 border-gray-200 rounded-lg  p-3 max-w-[70%]  flex justify-center item-center  w-full  ">
+                            <img
+                              src={normalizeImageUrl(
+                                courseData.certificationImage.image_path,
+                                "/assets/images/new-dynamic-course/certificate.jpg"
+                              )}
+                              alt="Certificate"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                              className="object-contain w-full h-auto rounded-md shadow-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </section>
+                  </section>
+                )}
 
                 {/* Get  Certified Section */}
                 {courseData?.allHeadline?.course_benefits && (
@@ -6046,82 +6248,6 @@ function DynamicPage({
                   </div>
                 </section>
 
-                {/*Instructors Section */}
-                {/* <section className="max-sm:p-3 py-7">
-                <div className="">
-                  <h2 className="md:max-w-[90%] m-auto heading text-center">
-                    {courseData?.allHeadline?.testimonials}
-                  </h2>
-                  <div className="w-full  mx-auto relative pt-[100px]">
-                    <div
-                      className={`flex relative transition-transform duration-500 ${
-                        transitioning ? "opacity-70" : "opacity-100"
-                      }`}
-                    >
-                      {visibleInstructors.map((instructor, index) => (
-                        <div
-                          key={index}
-                          className="relative flex-1 mx-3 bg-[#F7F3FF] border border-[#882CFB] rounded-2xl shadow-md p-5 text-center w-1/3 flex flex-col items-center"
-                        >
-                          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 w-[100px] h-[100px] rounded-full border-4 border-white shadow-md overflow-hidden bg-white flex items-center justify-center">
-                            <img
-                              src={instructor.image}
-                              alt={instructor.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="pt-12">
-                            <h2 className="text-xl font-bold">
-                              {instructor.name}
-                            </h2>
-                            <p className="text-sm text-[#2E318D] mb-2">
-                              {instructor.experience} Experience
-                            </p>
-                            <p className="text-gray-600 text-sm">
-                              {instructor.description}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-8 flex justify-end items-center gap-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={prevSlide}
-                        className="  bg-white  border border-[#DFF5FF] cursor-pointer hover:bg-[#2E318D] hover:text-white text-[#2E318D] p-3 rounded-full shadow-md transition"
-                      >
-                        <IoIosArrowBack size={20} />
-                      </button>
-
-                      <button
-                        onClick={nextSlide}
-                        className="  bg-white  border border-[#DFF5FF]  cursor-pointer hover:bg-[#2E318D] hover:text-white text-[#2E318D] p-3 rounded-full shadow-md transition"
-                      >
-                        <MdOutlineNavigateNext size={20} />
-                      </button>
-                    </div>
-                    <button className="relative group border-none bg-transparent p-0  cursor-pointer  ">
-                      <div className="relative flex items-center justify-between py-2 px-5 border-2 border-white  text-white rounded-full transform -translate-y-1 bg-[#2E318D] gap-3 transition duration-[600ms] ease-[cubic-bezier(0.3,0.7,0.4,1)] group-hover:-translate-y-1.5 group-hover:duration-[250ms] group-active:-translate-y-0.5 brightness-100 group-hover:brightness-110 ">
-                        <span className="select-none">View all Instructors</span>
-                        <svg
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          className="w-5 h-5 ml-2 -mr-1 transition duration-250 group-hover:translate-x-1"
-                        >
-                          <path
-                            clipRule="evenodd"
-                            d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h21.586l-4.293-4.293a1 1 0 010-1.414z"
-                            fillRule="evenodd"
-                          ></path>
-                        </svg>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </section> */}
-
                 {/*Learning Benefits - Dynamic from backend only */}
                 {learningObjectivesList && learningObjectivesList.length > 0 && (
                   <section className="py-5 max-sm:p-3 max-sm:pb-12 rounded-md">
@@ -6157,55 +6283,52 @@ function DynamicPage({
                 )}
 
                 {/* Hub for Technology Section */}
-                <section className="py-5 max-sm:p-3">
-                  <div className="flex justify-center items-center flex-col ">
-                    <h2 className=" heading text-center max-w-[80%] m-auto">
-                      {courseData?.allHeadline?.about_geography ? (
-                        <>{courseData.allHeadline.about_geography}</>
-                      ) : (
-                        <>A Hub for Technology, Learning, and Careers</>
-                      )}
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-1 gap-3 mt-3">
-                    <div className="flex gap-4 flex-col">
-                      {courseData?.aboutGeography?.map((item, index) => (
-                        <div
-                          key={index}
-                          className="bg-white border border-gray-200   rounded-md p-3"
-                        >
-                          {/* <div
-                            className="summernote-content prose max-w-none"
-                            dangerouslySetInnerHTML={{
-                              __html: item?.description,
-                            }}
-                          /> */}
-                          <div className="read-more-wrapper">
-                            <input
-                              type="checkbox"
-                              id="toggle-desc-aboutgeography"
-                              className="read-more-toggle"
-                            />
+                {Array.isArray(courseData?.aboutGeography) &&
+                  courseData.aboutGeography.length > 0 && (
+                    <section className="py-5 max-sm:p-3">
+                      <div className="flex justify-center items-center flex-col ">
+                        <h2 className=" heading text-center max-w-[80%] m-auto">
+                          {courseData?.allHeadline?.about_geography ? (
+                            <>{courseData.allHeadline.about_geography}</>
+                          ) : (
+                            <>A Hub for Technology, Learning, and Careers</>
+                          )}
+                        </h2>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-3 mt-3">
+                        <div className="flex gap-4 flex-col">
+                          {courseData.aboutGeography.map((item, index) => (
                             <div
-                              className="summernote-content  prose max-w-none read-more-content"
-                              dangerouslySetInnerHTML={{
-                                __html: item?.description,
-                              }}
-                            />
-
-                            <label
-                              htmlFor="toggle-desc-aboutgeography"
-                              className="read-more-btn"
+                              key={index}
+                              className="bg-white border border-gray-200   rounded-md p-3"
                             >
-                              <span className="more">Read More</span>
-                              <span className="less">Read Less</span>
-                            </label>
-                          </div>
+                              <div className="read-more-wrapper">
+                                <input
+                                  type="checkbox"
+                                  id="toggle-desc-aboutgeography"
+                                  className="read-more-toggle"
+                                />
+                                <div
+                                  className="summernote-content  prose max-w-none read-more-content"
+                                  dangerouslySetInnerHTML={{
+                                    __html: item?.description,
+                                  }}
+                                />
+
+                                <label
+                                  htmlFor="toggle-desc-aboutgeography"
+                                  className="read-more-btn"
+                                >
+                                  <span className="more">Read More</span>
+                                  <span className="less">Read Less</span>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
+                      </div>
+                    </section>
+                  )}
 
                 {/* YouTube Video Section */}
                 <>
@@ -6392,67 +6515,22 @@ function DynamicPage({
                 </section>
 
                 {/* Learner Segment Section */}
-                <section className="py-5 max-sm:p-3">
-                  <div className="flex justify-center items-center flex-col ">
-                    <h2 className=" heading text-center md:max-w-[85%] w-full m-auto">
-                      {courseData?.allHeadline?.segment ? (
-                        <>{courseData.allHeadline.segment}</>
-                      ) : (
-                        <>Learner Segment</>
-                      )}
-                    </h2>
-                  </div>
-                  <div className="mt-10 flex justify-center items-center">
-                    <img
-                      src="/assets/landingpage/msp_practitioner_certificate_img.png"
-                      alt=""
-                      className="bg-cover bg-center object-contain"
-                    />
-                  </div>
-                  {/* <div className="relative w-full flex items-center justify-center py-24 mt-12">
-                    <div className="absolute w-[450px] h-[450px] rounded-full border-4 border-dashed border-gray-300"></div>
-                    <div className="absolute w-[350px] h-[350px] rounded-full border-4 border-dashed border-gray-300 shadow-md"></div>
-                    <div className="w-[260px] h-[260px] rounded-full overflow-hidden shadow-lg z-10 bg-white">
+                {Boolean(courseData?.allHeadline?.segment) && (
+                  <section className="py-5 max-sm:p-3">
+                    <div className="flex justify-center items-center flex-col ">
+                      <h2 className=" heading text-center md:max-w-[85%] w-full m-auto">
+                        {courseData.allHeadline.segment}
+                      </h2>
+                    </div>
+                    <div className="mt-10 flex justify-center items-center">
                       <img
-                         src={
-                            courseData?.courseImage?.banner_image_path
-                              ? `${API_BASE_URL}/${courseData?.courseImage?.banner_image_path}`
-                              : ""
-                          }
+                        src="/assets/landingpage/msp_practitioner_certificate_img.png"
                         alt=""
-                        className="w-full h-full object-cover"
+                        className="bg-cover bg-center object-contain"
                       />
                     </div>
-                    <div className="absolute left-1/2 -translate-x-[380px] top-1/2 -translate-y-1/2 flex flex-col gap-14">
-                      {[
-                        "Program Lead",
-                        "Program Manager",
-                        "Portfolio Manager",
-                      ].map((item, i) => (
-                        <div key={i} className="flex justify-end item-end gap-3">
-                          <span className="text-lg font-medium whitespace-nowrap text-left">
-                            {item}
-                          </span>
-                          <FaCheckCircle className="text-[#882CFB] text-2xl" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="absolute  translate-x-[320px] top-1/2 -translate-y-1/2 flex flex-col gap-14">
-                      {[
-                        "Project Coordinator",
-                        "Business Analyst",
-                        "Project Portfolio Manager",
-                      ].map((item, i) => (
-                        <div key={i} className="flex items-start justify-start gap-3">
-                          <FaCheckCircle className="text-[#882CFB] text-2xl" />
-                          <span className="text-lg font-medium whitespace-nowrap">
-                            {item}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div> */}
-                </section>
+                  </section>
+                )}
 
                 {/* Cities we serve */}
                 <section className="py-5 max-sm:p-3">
@@ -6728,43 +6806,45 @@ function DynamicPage({
                 </section>
               )}
             {/* PPM Certificate Section */}
-            <section className=" py-5 max-sm:p-4">
-              <div className="max-w-7xl mx-auto  bg-[#372AAB] rounded-md">
-                <div className="flex  items-center p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-[40%_60%] gap-6 w-full">
-                    <div className=" text-white ">
-                      <h2 className="Sub_heading_white ">
-                        {courseData?.allHeadline?.alumni ? (
-                          <>{courseData.allHeadline.alumni}</>
-                        ) : (
-                          <>Alumni Success Stories</>
-                        )}
-                      </h2>
-                    </div>
-                    <div className=" text-white max-sm:p-3 p-5">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        {courseData?.courseAlumni?.length > 0 &&
-                          courseData?.courseAlumni
-                            .slice(0, 6)
-                            .map((item, index) => (
-                              <Link
-                                href={item?.company_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                key={index}
-                                className="bg-white text-gray-800 text-center p-3 transform skew-x-[-18deg] shadow-lg hover:scale-105 transition-transform duration-300 block"
-                              >
-                                <div className="transform skew-x-[12deg] text-wrap">
-                                  {item?.company_name || "NA"}
-                                </div>
-                              </Link>
-                            ))}
+            {Array.isArray(courseData?.courseAlumni) &&
+              courseData.courseAlumni.length > 0 && (
+                <section className=" py-5 max-sm:p-4">
+                  <div className="max-w-7xl mx-auto  bg-[#372AAB] rounded-md">
+                    <div className="flex  items-center p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-[40%_60%] gap-6 w-full">
+                        <div className=" text-white ">
+                          <h2 className="Sub_heading_white ">
+                            {courseData?.allHeadline?.alumni ? (
+                              <>{courseData.allHeadline.alumni}</>
+                            ) : (
+                              <>Alumni Success Stories</>
+                            )}
+                          </h2>
+                        </div>
+                        <div className=" text-white max-sm:p-3 p-5">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {courseData.courseAlumni
+                              .slice(0, 6)
+                              .map((item, index) => (
+                                <Link
+                                  href={item?.company_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  key={index}
+                                  className="bg-white text-gray-800 text-center p-3 transform skew-x-[-18deg] shadow-lg hover:scale-105 transition-transform duration-300 block"
+                                >
+                                  <div className="transform skew-x-[12deg] text-wrap">
+                                    {item?.company_name || "NA"}
+                                  </div>
+                                </Link>
+                              ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </section>
+                </section>
+              )}
 
             {/* Recommended Course Section */}
             {courseData?.allHeadline?.recommended_course && (
@@ -7142,6 +7222,23 @@ export async function getServerSideProps({ req, params }) {
       seoData?.description ||
       `Explore ${pageLabel.toLowerCase()} and details for ${course?.name || url_title}.`;
 
+    const schemaData =
+      customSupportData?.schema ||
+      customSupportData?.course?.schema ||
+      generateSupportPageSchema({
+        title: metaTitle,
+        description: metaDescription,
+        pageUrl,
+        courseName: course?.name || course?.course_title || url_title,
+        courseData: customSupportData,
+        breadcrumbs: [
+          { name: "Home", url: "/" },
+          { name: "All Courses", url: "/all-courses" },
+          { name: course?.name || url_title, url: `/${url_title}` },
+          { name: pageLabel, url: pageUrl },
+        ],
+      });
+
     return {
       props: {
         title: metaTitle,
@@ -7153,6 +7250,7 @@ export async function getServerSideProps({ req, params }) {
         courseData: customSupportData,
         isSupportPage: true,
         matchedSupportPage: matchedSupportPage,
+        schemaData,
       },
     };
   }
@@ -7178,15 +7276,27 @@ export async function getServerSideProps({ req, params }) {
       }
       const quizTitle = json?.data?.quiz?.title || "Exam Simulator";
       const courseName = json?.data?.course?.name || url_title;
+      const metaTitle = `${quizTitle} — Questions | ScholarAcad`;
+      const metaDescription = `Interactive question screen for ${quizTitle} - ${courseName}`;
       return {
         props: {
-          title: `${quizTitle} — Questions | ScholarAcad`,
-          description: `Interactive question screen for ${quizTitle} - ${courseName}`,
+          title: metaTitle,
+          description: metaDescription,
           keywords: `${quizTitle}, questions, mock exam`,
-          ogTitle: `${quizTitle} — Questions | ScholarAcad`,
-          ogDescription: `Interactive question screen for ${quizTitle} - ${courseName}`,
+          ogTitle: metaTitle,
+          ogDescription: metaDescription,
           ogUrl: pageUrl,
           courseData: json?.data || null,
+          schemaData:
+            json?.data?.schema ||
+            json?.schema ||
+            generateSupportPageSchema({
+              title: metaTitle,
+              description: metaDescription,
+              pageUrl,
+              courseName,
+              courseData: json?.data || null,
+            }),
         },
       };
     } catch (e) {
@@ -7215,19 +7325,29 @@ export async function getServerSideProps({ req, params }) {
       }
       const quizTitle = json?.data?.quiz?.title || "Quiz Details";
       const courseName = json?.data?.course?.name || url_title;
+      const metaTitle = `${quizTitle} — ${courseName} | ScholarAcad`;
+      const metaDescription =
+        json?.data?.quiz?.description ||
+        `Practice ${quizTitle} at ScholarAcad`;
       return {
         props: {
-          title: `${quizTitle} — ${courseName} | ScholarAcad`,
-          description:
-            json?.data?.quiz?.description ||
-            `Practice ${quizTitle} at ScholarAcad`,
+          title: metaTitle,
+          description: metaDescription,
           keywords: `${quizTitle}, ${courseName}, mock exam`,
-          ogTitle: `${quizTitle} — ${courseName} | ScholarAcad`,
-          ogDescription:
-            json?.data?.quiz?.description ||
-            `Practice ${quizTitle} at ScholarAcad`,
+          ogTitle: metaTitle,
+          ogDescription: metaDescription,
           ogUrl: pageUrl,
           courseData: json?.data || null,
+          schemaData:
+            json?.data?.schema ||
+            json?.schema ||
+            generateSupportPageSchema({
+              title: metaTitle,
+              description: metaDescription,
+              pageUrl,
+              courseName,
+              courseData: json?.data || null,
+            }),
         },
       };
     } catch (e) {
@@ -7261,16 +7381,29 @@ export async function getServerSideProps({ req, params }) {
           .split("-")
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(" ");
+      const metaTitle = `${courseName} Quizzes & Mock Exams | ScholarAcad`;
+      const metaDescription = `Practice interactive quizzes and realistic mock exams for ${courseName}.`;
 
       return {
         props: {
-          title: `${courseName} Quizzes & Mock Exams | ScholarAcad`,
-          description: `Practice interactive quizzes and realistic mock exams for ${courseName}.`,
+          title: metaTitle,
+          description: metaDescription,
           keywords: `${courseName}, mock exam, quizzes, practice test`,
-          ogTitle: `${courseName} Quizzes & Mock Exams | ScholarAcad`,
-          ogDescription: `Practice interactive quizzes and realistic mock exams for ${courseName}.`,
+          ogTitle: metaTitle,
+          ogDescription: metaDescription,
           ogUrl: pageUrl,
           courseData: json,
+          schemaData:
+            json?.data?.schema ||
+            json?.schema ||
+            json?.course?.schema ||
+            generateSupportPageSchema({
+              title: metaTitle,
+              description: metaDescription,
+              pageUrl,
+              courseName,
+              courseData: json,
+            }),
         },
       };
     } catch (e) {
@@ -7344,6 +7477,8 @@ export async function getServerSideProps({ req, params }) {
         seoData?.description ||
         `Explore ${pageLabel.toLowerCase()} and details for ${course?.name || url_title}.`;
 
+      const initialSupportSchema = json?.data?.schema || null;
+
       // Enrich support page with core course data (including header_image) if available
       if (url_title) {
         try {
@@ -7390,13 +7525,42 @@ export async function getServerSideProps({ req, params }) {
           if (dynRes.ok) {
             const dynJson = await dynRes.json();
             if (dynJson?.data) {
+              const supportCourse = json.data.course;
               Object.assign(json.data, dynJson.data);
+              if (supportCourse) {
+                json.data.course = supportCourse;
+              }
+              if (initialSupportSchema) {
+                json.data.schema = initialSupportSchema;
+              }
             }
           }
         } catch (e) {
           // ignore
         }
       }
+
+      if (json?.data) {
+        json.data = sanitizeDynamicCourseData(json.data);
+      }
+
+      const supportSchemaData =
+        initialSupportSchema ||
+        json?.data?.schema ||
+        json?.data?.course?.schema ||
+        generateSupportPageSchema({
+          title: metaTitle,
+          description: metaDescription,
+          pageUrl,
+          courseName: course?.name || course?.course_title || url_title,
+          courseData: json?.data || null,
+          breadcrumbs: [
+            { name: "Home", url: "/" },
+            { name: "All Courses", url: "/all-courses" },
+            { name: course?.name || url_title, url: `/${url_title}` },
+            { name: pageLabel, url: pageUrl },
+          ],
+        });
 
       return {
         props: {
@@ -7409,6 +7573,7 @@ export async function getServerSideProps({ req, params }) {
           courseData: json?.data || null,
           isSupportPage: true,
           matchedSupportPage: matchedSupportPage,
+          schemaData: supportSchemaData,
         },
       };
     } catch (e) {
@@ -7484,13 +7649,55 @@ export async function getServerSideProps({ req, params }) {
       null;
     const metaKeywords = data?.meta_keywords || courseInfo?.meta_keywords || null;
 
-    const mergedData = {
+    const mergedData = sanitizeDynamicCourseData({
       ...(json?.data || {}),
+      schema: courseInfo?.schema || json?.data?.schema || null,
       course: courseInfo || json?.data?.course || null,
       header_image: courseInfo?.header_image || json?.data?.header_image || null,
       course_title: courseInfo?.course_title || json?.data?.course_title || null,
       short_description: courseInfo?.short_description || json?.data?.short_description || null,
-    };
+    });
+
+    const resolvedCourseTitle =
+      data?.course_title ||
+      data?.heading ||
+      courseInfo?.course_title ||
+      (url_title
+        ? url_title
+            .split("-")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
+        : "Certification Training");
+
+    const schemaData =
+      courseInfo?.schema ||
+      json?.data?.schema ||
+      (isNotes
+        ? generateSupportPageSchema({
+            title: metaTitle || `${resolvedCourseTitle} - Complete Study Notes & Revision Guide | ScholarAcad`,
+            description: metaDescription,
+            pageUrl,
+            courseName: resolvedCourseTitle,
+            courseData: mergedData,
+            breadcrumbs: [
+              { name: "Home", url: "/" },
+              { name: resolvedCourseTitle, url: `/${url_title || ""}` },
+              { name: "Notes & Revision Guide", url: pageUrl },
+            ],
+          })
+        : generateCourseSchema({
+            courseName: resolvedCourseTitle,
+            courseDescription: metaDescription,
+            courseUrl: pageUrl,
+            courseCode: url_title,
+            keywords: metaKeywords,
+            courseData: mergedData,
+            breadcrumbs: [
+              { name: "Home", url: "/" },
+              { name: "All Courses", url: "/all-courses" },
+              { name: resolvedCourseTitle, url: `/${url_title || ""}` },
+            ],
+          }));
 
     return {
       props: {
@@ -7501,10 +7708,17 @@ export async function getServerSideProps({ req, params }) {
         ogDescription: metaDescription,
         ogUrl: pageUrl,
         courseData: mergedData,
+        schemaData,
       },
     };
   } catch (e) {
     if (candidateSubSlug) return { notFound: true };
+    const fallbackTitle = url_title
+      ? url_title
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+      : "Certification Training";
     return {
       props: {
         title: null,
@@ -7514,6 +7728,13 @@ export async function getServerSideProps({ req, params }) {
         ogDescription: null,
         ogUrl: pageUrl,
         courseData: null,
+        schemaData: url_title
+          ? generateCourseSchema({
+              courseName: fallbackTitle,
+              courseUrl: pageUrl,
+              courseCode: url_title,
+            })
+          : null,
       },
     };
   }
